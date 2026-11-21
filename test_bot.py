@@ -135,6 +135,15 @@ class BotTests(unittest.TestCase):
         obs['self']['energy'] = 80
         self.assertTrue(bot.act(obs)['fire'][1])
 
+        # Capture requires uninterrupted residence in the supply ring. Do not
+        # strafe out of an uncontested drop while waiting for its repair.
+        obs['self']['hp'] = obs['self']['max_hp'] * .5
+        obs['mechs'], obs['pickups'], obs['cubes'], obs['crates'] = [], [], [], []
+        obs['zone'].update(center=pos[:2], next_center=pos[:2], radius=250, next_radius=200)
+        obs['drops'] = [{'id': 20000, 'pos': [pos[0] + 1, pos[1], pos[2]], 'radius': 8,
+                         'lands_in': 0, 'capture_s': 4, 'progress': 1, 'holder': obs['self']['id']}]
+        self.assertEqual(bot.act(obs)['move'], [0, 0])
+
 
 if __name__ == '__main__':
     unittest.main()

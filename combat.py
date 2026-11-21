@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-skirmish-v6'
+    name = 'Oval-Sentinel-supply-v7'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -179,6 +179,26 @@ class Combat:
         seeking_cover = self.healing and self.cover_goal is not None and not urgent
         if seeking_cover:
             goal = self.cover_goal[:2]
+        supply = None
+        if hp < .85 or me['cubes'] < 10:
+            options = []
+            for drop in obs['drops']:
+                distance = math.dist(pos, drop['pos'])
+                if distance > (130 if hp < .7 else 85) or drop['holder'] not in (None, me['id']):
+                    continue
+                if drop['lands_in'] > distance / stats['walk_speed'] + 5:
+                    continue
+                if math.dist(drop['pos'][:2], zone['next_center']) > zone['next_radius'] - 8:
+                    continue
+                opposition = min((math.dist(drop['pos'], e['pos']) for e in mechs), default=1e9)
+                if opposition < 55 and not (drop['holder'] == me['id'] and drop['capture_s'] - drop['progress'] < 1):
+                    continue
+                options.append((distance, drop))
+            if options:
+                supply = min(options, key=lambda pair: pair[0])[1]
+                goal = supply['pos'][:2]
+                seeking_loot = True
+                seeking_cover = False
         travel_goal = goal
         if math.dist(pos[:2], goal) > 15:
             travel_goal = self.navigator.waypoint(pos, goal, now)
@@ -196,6 +216,8 @@ class Combat:
             strafe = self.side * (1 if int(now / 2.2) % 2 == 0 else -1)
             direction = unit(ex * radial - ey * strafe, ey * radial + ex * strafe)
         if math.dist(pos[:2], goal) < 2 and target is None:
+            direction = (0, 0)
+        if supply and math.dist(pos[:2], supply['pos'][:2]) < supply['radius'] - 3:
             direction = (0, 0)
         self.navigate(action, obs, direction)
         action['aim'] = [me['aim'][0] + .3, 0]

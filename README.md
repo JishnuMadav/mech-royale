@@ -61,6 +61,8 @@ also scored 3.67 (receipt BB-AA2FFC04, commit
 The v5 cover changes and v6 skirmish changes are experimental until scored
 practice is complete. V6 adds enemy spacing during zone travel, earlier boost
 use near attackers, and exploration when a spawn offers no visible equipment.
+V7 additionally captures nearby uncontested supply drops for full repair and
+power cubes. It uses the supplied landing and capture timing from observations.
 
 ## Submission
 
