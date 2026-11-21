@@ -26,6 +26,7 @@ class Combat:
         self.healing = False
         self.pickup_memory = {}
         self.cube_memory = {}
+        self.last_threat = (-100, 0)
 
     def aim_at(self, me, target, kind, weapon):
         scale = 1 + 0.05 * target.get('cubes', 0)
@@ -70,6 +71,9 @@ class Combat:
         pos, stats = me['pos'], me['stats']
         x, y, z = pos
         hp = me['hp'] / me['max_hp']
+        for event in obs['events']:
+            if event['type'] == 'damaged' and event.get('bearing') is not None:
+                self.last_threat = (now, event['bearing'])
         weapons = me['weapons']
         action = {'tick': obs['tick'], 'fire': [False, False], 'boost': False, 'jump': False}
         by_kind = {w['kind']: (i, w) for i, w in enumerate(weapons) if w}
@@ -221,6 +225,11 @@ class Combat:
             direction = (0, 0)
         self.navigate(action, obs, direction)
         action['aim'] = [me['aim'][0] + .3, 0]
+        if now - self.last_threat[0] < 2:
+            action['aim'] = [self.last_threat[1], 0]
+        elif mechs:
+            watch = min(mechs, key=lambda enemy: math.dist(pos, enemy['pos']))
+            action['aim'] = [math.atan2(watch['pos'][1] - y, watch['pos'][0] - x), 0]
 
         if target:
             distance = math.dist(pos, target['pos'])

@@ -63,6 +63,8 @@ practice is complete. V6 adds enemy spacing during zone travel, earlier boost
 use near attackers, and exploration when a spawn offers no visible equipment.
 V7 additionally captures nearby uncontested supply drops for full repair and
 power cubes. It uses the supplied landing and capture timing from observations.
+When no target is visible, it faces recent incoming damage instead of exposing
+its rear armor while scanning.
 
 ## Submission
 
