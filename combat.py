@@ -40,11 +40,18 @@ class Combat:
     def escape_bearings(self, obs, mechs, avoid_arc):
         now, me = obs['t'], obs['self']
         self.recent_hits = {who: hit for who, hit in self.recent_hits.items() if now - hit[0] <= 3}
+        visible = {enemy['id'] for enemy in mechs}
         for e in obs['events']:
             who = e.get('by')
             if (e['type'] == 'damaged' and who in range(16) and who != me['id']
                     and e.get('bearing') is not None):
-                self.recent_hits[who] = (now, e['bearing'], e['weapon'])
+                previous = self.recent_hits.get(who)
+                unseen_hits = 0
+                if who not in visible and e['weapon'] == 'gun':
+                    unseen_hits = 1
+                    if previous and now - previous[0] <= 1.2:
+                        unseen_hits = max(1, previous[3] + int(now > previous[0]))
+                self.recent_hits[who] = (now, e['bearing'], e['weapon'], unseen_hits)
         bearings = {who: hit[1] for who, hit in self.recent_hits.items()}
         arc = {who for who, hit in self.recent_hits.items()
                if hit[2] == 'lightning' and (avoid_arc or me['hp'] < .5 * me['max_hp'])}
@@ -60,7 +67,9 @@ class Combat:
             if who in bearings or who in arc:
                 bearings[who] = math.atan2(p[1] - pos[1], p[0] - pos[0])
         starter = now < 45 and me['cubes'] == 0 and sum(w is not None for w in me['weapons']) == 1
-        if arc or len(self.recent_hits) >= 2 or (starter and self.recent_hits):
+        under_unseen_fire = any(who not in visible and hit[3] >= 2 and now - hit[0] < 1.5
+                                for who, hit in self.recent_hits.items())
+        if arc or under_unseen_fire or len(self.recent_hits) >= 2 or (starter and self.recent_hits):
             return bearings, arc
         return {}, set()
 

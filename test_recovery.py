@@ -209,6 +209,22 @@ class RecoveryTests(unittest.TestCase):
         self.assertIsNotNone(bot.escape_direction)
         self.assertTrue(all(math.cos(action['aim'][0]-a) > 0 for a in angles))
 
+    def test_repeat_hits_from_an_unseen_gun_break_idle(self):
+        bot, obs = self.scenario()
+        obs['t'] = 60
+        obs['self']['cubes'] = 8
+        obs['events'] = [dict(type='damaged', by=(obs['self']['id']+1) % 16,
+                              weapon='gun', amount=45, bearing=0)]
+        bot.arena.clear_shot = lambda *args: True
+        bot.act(obs)
+        self.assertIsNone(bot.escape_direction)
+        obs['t'] += .3
+        self.assertLess(bot.act(obs)['move'][0], -.8)
+        obs['events'] = []
+        obs['t'] += 1.6
+        bot.act(obs)
+        self.assertIsNone(bot.escape_direction)
+
 
 if __name__ == '__main__':
     unittest.main()
