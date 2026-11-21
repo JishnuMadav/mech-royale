@@ -32,6 +32,23 @@ class RecoveryTests(unittest.TestCase):
         bot.navigator.waypoint = lambda pos, goal, now: goal
         return bot, obs
 
+    def test_weapon_sound_guides_idle_scan_and_yields_to_damage(self):
+        bot, obs = self.scenario()
+        obs['sounds'] = [dict(kind='gun', dist='far', age=.1, bearing=-2),
+                         dict(kind='death', dist='near', age=.1, bearing=-2),
+                         dict(kind='laser_charge', dist='mid', age=.5, bearing=-2)]
+        self.assertAlmostEqual(bot.act(obs)['aim'][0], .3)
+        obs['sounds'].append(dict(kind='gun', dist='near', age=.05, bearing=2.4))
+        self.assertAlmostEqual(bot.act(obs)['aim'][0], 2.4)
+        obs['sounds'] = []
+        obs['t'] += .2
+        self.assertAlmostEqual(bot.act(obs)['aim'][0], 2.4)
+        obs['events'] = [dict(type='damaged', bearing=-1.5, weapon='gun', amount=45)]
+        self.assertAlmostEqual(bot.act(obs)['aim'][0], -1.5)
+        obs['events'] = []
+        obs['t'] += 2.1
+        self.assertAlmostEqual(bot.act(obs)['aim'][0], .3)
+
     def test_recovery_starts_strictly_below_25_and_finishes_at_60(self):
         bot, _ = self.scenario()
         for hp in (.85, .59, .26, .25):

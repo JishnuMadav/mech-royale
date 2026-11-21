@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-recovery-v26'
+    name = 'Oval-Sentinel-sound-scan-v29'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -27,9 +27,28 @@ class Combat:
         self.pickup_memory = {}
         self.cube_memory = {}
         self.last_threat = (-100, 0)
+        self.listened_at = -100
+        self.sound_bearing = 0
         self.progress_pos = None
         self.progress_at = 0
         self.zone_urgent = False
+
+    def scan_yaw(self, obs):
+        yaw, now = obs['self']['aim'][0], obs['t']
+        if now - self.listened_at >= 1.4:
+            # A sound has no source ID. Only interrupt a scan for a fresh
+            # weapon cue outside our view, with a pause between turns.
+            cues = [s for s in obs['sounds']
+                    if s['kind'] in ('laser_charge', 'gun', 'lightning', 'mortar')
+                    and s['dist'] in ('near', 'mid') and s['age'] <= .25
+                    and abs(angle_delta(s['bearing'], yaw)) > math.pi / 3]
+            if cues:
+                cue = min(cues, key=lambda s: (s['dist'] != 'near', s['kind'] != 'laser_charge', s['age']))
+                self.sound_bearing = cue['bearing']
+                self.listened_at = now
+        if now - self.listened_at <= .6 and abs(angle_delta(self.sound_bearing, yaw)) > .2:
+            return self.sound_bearing
+        return yaw + .3
 
     def update_recovery(self, hp):
         # Enter only below 25%; finish a recovery rather than oscillating at 25%.
@@ -263,6 +282,8 @@ class Combat:
         elif mechs:
             watch = min(mechs, key=lambda enemy: math.dist(pos, enemy['pos']))
             action['aim'] = [math.atan2(watch['pos'][1] - y, watch['pos'][0] - x), 0]
+        elif target is None:
+            action['aim'][0] = self.scan_yaw(obs)
 
         if target:
             distance = math.dist(pos, target['pos'])
