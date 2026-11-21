@@ -65,6 +65,8 @@ V7 additionally captures nearby uncontested supply drops for full repair and
 power cubes. It uses the supplied landing and capture timing from observations.
 When no target is visible, it faces recent incoming damage instead of exposing
 its rear armor while scanning.
+V8 tests faster early growth: it seeks the six-cube upgrade, farms isolated
+drones and crates from farther away, and can run to a safe supply drop.
 
 ## Submission
 

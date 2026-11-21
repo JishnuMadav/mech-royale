@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-supply-v7'
+    name = 'Oval-Sentinel-growth-v8'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -29,6 +29,7 @@ class Combat:
         self.last_threat = (-100, 0)
         self.progress_pos = None
         self.progress_at = 0
+        self.supply_running = False
 
     def aim_at(self, me, target, kind, weapon):
         scale = 1 + 0.05 * target.get('cubes', 0)
@@ -132,7 +133,7 @@ class Combat:
         targets = []
         for m in obs['mechs']:
             distance = math.dist(pos, m['pos'])
-            if m['kind'] == 'npc' and (nearest < 90 or distance > 65):
+            if m['kind'] == 'npc' and (nearest < 110 or distance > 100):
                 continue
             top = m['pos'][2] + (4.5 * (1 + .05 * m.get('cubes', 0)) if m['kind'] == 'mech' else 1.75)
             if not self.arena.clear_shot(origin, [*m['pos'][:2], top]):
@@ -145,10 +146,10 @@ class Combat:
             if m.get('hp', 1400) < 300:
                 value -= 40
             targets.append((value, m))
-        if nearest > 90 and not recovering:
+        if nearest > 120 and not recovering:
             for crate in obs['crates']:
                 distance = math.dist(pos, crate['pos'])
-                if distance < 65 and abs(crate['pos'][2] - z) < 6 and self.arena.clear_shot(origin, [*crate['pos'][:2], crate['pos'][2] + 1]):
+                if distance < 90 and abs(crate['pos'][2] - z) < 6 and self.arena.clear_shot(origin, [*crate['pos'][:2], crate['pos'][2] + 1]):
                     targets.append((distance + 65, dict(crate, kind='crate', vel=[0, 0, 0])))
         target = min(targets, key=lambda pair: pair[0])[1] if targets else None
         self.target_id = target['id'] if target else None
@@ -156,7 +157,7 @@ class Combat:
         # Hold favorable territory instead of automatically walking into the
         # coordinated squad. Move to the next circle when its edge will catch us.
         goal = list(pos[:2])
-        if not self.healing and nearest > 80 and (len(by_kind) < 2 or (now < 45 and me['cubes'] < 3)):
+        if not self.healing and nearest > 100 and (len(by_kind) < 2 or (now < 80 and me['cubes'] < 6)):
             # An empty-handed spawn behind cover needs exploration; scanning in
             # place cannot reveal loot on the other side of the building.
             goal = list(zone['next_center'])
@@ -190,7 +191,8 @@ class Combat:
             options = []
             for drop in obs['drops']:
                 distance = math.dist(pos, drop['pos'])
-                if distance > (130 if hp < .7 else 85) or drop['holder'] not in (None, me['id']):
+                reach = 200 if nearest > 100 or hp < .7 else 85
+                if distance > reach or drop['holder'] not in (None, me['id']):
                     continue
                 if drop['lands_in'] > distance / stats['walk_speed'] + 5:
                     continue
@@ -226,6 +228,9 @@ class Combat:
         if supply and math.dist(pos[:2], supply['pos'][:2]) < supply['radius'] - 3:
             direction = (0, 0)
         self.navigate(action, obs, direction)
+        traveling_to_supply = supply and math.dist(pos[:2], supply['pos'][:2]) > supply['radius'] - 3 and nearest > 90 and me['grounded']
+        self.supply_running = bool(traveling_to_supply and me['energy'] > (25 if self.supply_running else 75))
+        action['boost'] = action['boost'] or self.supply_running
         action['aim'] = [me['aim'][0] + .3, 0]
         if now - self.last_threat[0] < 2:
             action['aim'] = [self.last_threat[1], 0]
