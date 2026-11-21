@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-focus-v20'
+    name = 'Oval-Sentinel-focus-repair-v22'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -120,7 +120,7 @@ class Combat:
         recovering = self.healing and nearest > 55
         if obs['offer']:
             ranks = {'gun_damage': 88, 'gun_rate': 86, 'gun_mag': 98, 'plating': 100, 'armor': 94,
-                     'servos': 95, 'nanites': 96 if hp < .55 else 80, 'reactor': 77, 'jets': 70, 'capacitor': 60,
+                     'servos': 95, 'nanites': 120, 'reactor': 77, 'jets': 70, 'capacitor': 60,
                      'lightning_efficiency': 108, 'lightning_range': 106, 'laser_damage': 115,
                      'laser_charge': 110, 'gun_velocity': 78}
             action['pick'] = max(range(len(obs['offer']['choices'])), key=lambda i: ranks.get(obs['offer']['choices'][i]['id'], 25))
