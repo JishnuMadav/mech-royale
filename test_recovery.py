@@ -99,6 +99,17 @@ class RecoveryTests(unittest.TestCase):
                              lands_in=0, capture_s=4, progress=1, holder=obs['self']['id'])]
         self.assertGreater(bot.act(obs)['move'][0], .8)
 
+    def test_starter_gun_does_not_close_on_distant_mech(self):
+        bot, obs = self.scenario()
+        pos = obs['self']['pos']
+        obs['mechs'] = [dict(id=99, kind='mech', hp=1400, cubes=0,
+                             pos=[pos[0] + 100, pos[1], pos[2]], vel=[0, 0, 0])]
+        bot.arena.clear_shot = lambda *args: True
+        bot.navigate = lambda action, obs, direction: action.update(move=direction)
+        action = bot.act(obs)
+        self.assertAlmostEqual(action['move'][0], 0)
+        self.assertAlmostEqual(abs(action['move'][1]), 1)
+
     def test_escape_after_lightning_hit_preserves_energy(self):
         bot, obs = self.scenario()
         obs['self'].update(grounded=True, energy=90)

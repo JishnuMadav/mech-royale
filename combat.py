@@ -294,8 +294,8 @@ class Combat:
             if hp < 0.35 or close_count >= 3:
                 preferred += 40
             radial = max(-1.3, min(1.2, (distance - preferred) / 25))
-            if len(by_kind) >= 2 and distance > preferred and me['in_zone']:
-                radial = 0  # Already equipped: strafe without closing for a kill.
+            if distance > preferred and me['in_zone']:
+                radial = 0  # Strafe and defend; loot and zone travel have their own goals.
             strafe = self.side * (1 if int(now / 2.2) % 2 == 0 else -1)
             direction = unit(ex * radial - ey * strafe, ey * radial + ex * strafe)
         if math.dist(pos[:2], goal) < 2 and target is None:
