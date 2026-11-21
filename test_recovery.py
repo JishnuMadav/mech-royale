@@ -99,6 +99,52 @@ class RecoveryTests(unittest.TestCase):
                              lands_in=0, capture_s=4, progress=1, holder=obs['self']['id'])]
         self.assertGreater(bot.act(obs)['move'][0], .8)
 
+    def test_gun_disengagement_requires_two_mechs_and_inward_velocity(self):
+        bot, _ = self.scenario()
+        pos = [0, 0, 0]
+        first = dict(pos=[45, 0, 0])
+        second = dict(pos=[163, 0, 0], vel=[8, 0, 0])
+        self.assertIsNone(bot.disengage(pos, [first], 0))
+        self.assertIsNone(bot.disengage(pos, [first, second], .1))
+        second['vel'] = [0, 8, 0]
+        self.assertIsNone(bot.disengage(pos, [first, second], .2))
+        second['vel'] = [-8, 0, 0]
+        self.assertEqual(bot.disengage(pos, [first, second], .3), (-1, 0))
+        self.assertEqual(bot.disengage(pos, [first], 1), (-1, 0))
+        self.assertIsNone(bot.disengage(pos, [], 3))
+        second.update(pos=[-163, 0, 0], vel=[8, 0, 0])
+        self.assertGreater(abs(bot.disengage(pos, [first, second], 4)[1]), .9)
+
+    def test_equipped_bot_and_urgent_zone_cancel_disengagement(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        x, y, z = me['pos']
+        obs['mechs'] = [dict(id=i, pos=[x+d, y, z], kind='mech', hp=1400,
+                             cubes=0, vel=[-8, 0, 0]) for i, d in [(5, 45), (6, 163)]]
+        bot.arena.clear_shot = lambda *a: True
+        me['weapons'][1] = None
+        action = bot.act(obs)
+        self.assertLess(action['move'][0], -.5)
+        self.assertGreater(bot.escape_until, obs['t'])
+        me['weapons'][1] = dict(kind='laser', charge=0, cooldown=0, stats=self.hello['config']['weapons']['laser'])
+        bot.act(obs)
+        self.assertLess(bot.escape_until, obs['t'])
+        me['weapons'][1] = None
+        me['in_zone'] = False
+        bot.act(obs)
+        self.assertLess(bot.escape_until, obs['t'])
+
+    def test_exploration_does_not_reverse_back_into_recent_fight(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        x, y = me['pos'][:2]
+        obs['zone']['next_center'] = [x - 40, y]
+        me['weapons'][1] = None
+        bot.escape_heading, bot.escape_until = (1, 0), obs['t']
+        self.assertGreater(abs(bot.act(obs)['move'][1]), .7)
+        obs['t'] += 5
+        self.assertLess(bot.act(obs)['move'][0], -.7)
+
     def test_zone_distance_accounts_for_wall_detour(self):
         class Map:
             bounds = dict(minX=-80, maxX=80, minY=-80, maxY=80)

@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-recovery-v26'
+    name = 'Oval-Sentinel-disengage-v35'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -30,6 +30,37 @@ class Combat:
         self.progress_pos = None
         self.progress_at = 0
         self.zone_urgent = False
+        self.escape_heading = None
+        self.escape_until = -1
+
+    def disengage(self, pos, mechs, now):
+        """Leave a nearby duel when a distinct visible opponent is running toward it."""
+        ordered = sorted(mechs, key=lambda m: math.dist(pos, m['pos']))
+        if len(ordered) >= 2 and math.dist(pos, ordered[0]['pos']) <= 95:
+            first = ordered[0]
+            for second in ordered[1:]:
+                delta = (pos[0] - second['pos'][0], pos[1] - second['pos'][1])
+                distance = math.hypot(*delta)
+                if distance < 1 or math.dist(pos, second['pos']) > 175:
+                    continue
+                velocity = second.get('vel', (0, 0, 0))
+                closing = (delta[0] * velocity[0] + delta[1] * velocity[1]) / distance
+                if closing < 2 or distance - closing * 4 > 145:
+                    continue
+                a = unit(pos[0] - first['pos'][0], pos[1] - first['pos'][1])
+                b = unit(*delta)
+                # Opponents on opposite sides require a lateral exit. Keep the side
+                # stable across observations instead of walking toward either one.
+                if a[0] * b[0] + a[1] * b[1] < -.65:
+                    side = self.side
+                    if self.escape_heading and now < self.escape_until:
+                        side = 1 if -a[1]*self.escape_heading[0] + a[0]*self.escape_heading[1] >= 0 else -1
+                    heading = unit(.3*a[0] - side*a[1], .3*a[1] + side*a[0])
+                else:
+                    heading = unit(a[0] + .8*b[0], a[1] + .8*b[1])
+                self.escape_heading, self.escape_until = heading, now + 2.5
+                break
+        return self.escape_heading if now < self.escape_until else None
 
     def update_recovery(self, hp):
         # Enter only below 25%; finish a recovery rather than oscillating at 25%.
@@ -256,7 +287,26 @@ class Combat:
             direction = (0, 0)
         if supply and math.dist(pos[:2], supply['pos'][:2]) < supply['radius'] - 3:
             direction = (0, 0)
+        escape = None
+        if (set(by_kind) == {'gun'} and not urgent and not seeking_cover and not supply
+                and zone['next_radius'] > 30 and 'take' not in action):
+            escape = self.disengage(pos, mechs, now)
+            if (escape is None and self.escape_until >= 0 and now < self.escape_until + 4
+                    and nearest > 95 and self.escape_heading):
+                # On breaking sight, exploration can immediately send us back through
+                # the same doorway. Continue across the fight toward the next circle.
+                dx, dy = self.escape_heading
+                if direction[0]*dx + direction[1]*dy < -.3:
+                    cx, cy = zone['next_center']
+                    side = 1 if -dy*(cx-x) + dx*(cy-y) >= 0 else -1
+                    direction = unit(.25*dx - side*dy, .25*dy + side*dx)
+        else:
+            self.escape_until = -1
+        if escape:
+            direction = escape
         self.navigate(action, obs, direction)
+        if escape and me['energy'] > .45 * me['max_energy']:
+            action['boost'] = True
         action['aim'] = [me['aim'][0] + .3, 0]
         if now - self.last_threat[0] < 2:
             action['aim'] = [self.last_threat[1], 0]
