@@ -44,6 +44,42 @@ class RecoveryTests(unittest.TestCase):
         bot.update_recovery(.6)
         self.assertFalse(bot.healing)
 
+    def test_first_cube_precedes_weapon_only_in_the_opening(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        me.update(cubes=0, weapons=[me['weapons'][0], None])
+        x,y,z = me['pos']
+        bot.arena.ground = lambda *args: z
+        obs['t'] = 1
+        obs['pickups'] = [dict(id=8001, kind='laser', pos=[x-10,y,z])]
+        obs['cubes'] = [dict(id=5001,pos=[x+15,y,z])]
+        self.assertGreater(bot.act(obs)['move'][0], .8)
+        self.assertEqual(bot.first_cube_id, 5001)
+        me['cubes'] = 1
+        self.assertLess(bot.act(obs)['move'][0], -.8)
+        self.assertIsNone(bot.first_cube_id)
+
+    def test_opening_loot_rejects_exposed_path_and_unreachable_crate(self):
+        bot, obs = self.scenario()
+        x,y,z = obs['self']['pos']
+        bot.arena.ground = lambda *args: z
+        enemy = dict(pos=[x,y+90,z])
+        cube = dict(id=5001,pos=[x+18,y,z])
+        bot.arena.clear_shot = lambda origin, end: x+5 < end[0] < x+10
+        self.assertIsNone(bot.opening_loot(obs, [cube], [enemy]))
+        obs['crates'] = [dict(id=1002,hp=45,pos=[x+20,y,z])]
+        bot.arena.clear_shot = lambda *args: True
+        self.assertEqual(bot.opening_loot(obs, [], [])[0]['id'], 1002)
+        gun = obs['self']['weapons'][0]
+        obs['crates'][0].update(hp=300, pos=[x+35,y,z])
+        gun.update(ammo=12, reload=0, cooldown=0)
+        self.assertEqual(bot.opening_loot(obs, [], [])[0]['id'], 1002)
+        gun['ammo'] = 2
+        self.assertIsNone(bot.opening_loot(obs, [], []))
+        obs['crates'][0]['hp'] = 45
+        bot.arena.clear_move = lambda p,*args: p[0] < x+7
+        self.assertIsNone(bot.opening_loot(obs, [], []))
+
     def test_does_not_seek_cover_at_half_health_when_outnumbered(self):
         bot, obs = self.scenario()
         pos = obs['self']['pos']

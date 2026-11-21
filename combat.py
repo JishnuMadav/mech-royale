@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-recovery-v26'
+    name = 'Oval-Sentinel-first-cube-v31'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -30,6 +30,50 @@ class Combat:
         self.progress_pos = None
         self.progress_at = 0
         self.zone_urgent = False
+        self.first_cube_id = None
+
+    def opening_loot(self, obs, cubes, enemies):
+        me, zone = obs['self'], obs['zone']
+        pos, stats = me['pos'], me['stats']
+        gun = next((w for w in me['weapons'] if w and w['kind'] == 'gun'), None)
+        damage = gun['stats']['damage'] if gun else 0
+        options = [(0, c) for c in cubes]
+        if gun and damage > 0:
+            for c in obs['crates']:
+                shots = math.ceil(c['hp'] / damage)
+                walk_time = math.dist(pos[:2], c['pos'][:2]) / stats['walk_speed']
+                firing_time = gun['cooldown'] + (shots-1) * gun['stats']['cooldown']
+                if shots <= 2 or (shots <= gun['ammo'] and not gun['reload'] and firing_time + .4 <= walk_time):
+                    options.append((1, c))
+        # A loose cube saves firing and reload time. Consider only short walks.
+        nearby = [(math.dist(pos, c['pos']) + 8 * crate, crate, c) for crate, c in options
+                  if abs(c['pos'][2] - pos[2]) < 4 and math.dist(pos, c['pos']) <= 55]
+        for _, crate, item in sorted(nearby, key=lambda v: v[0])[:2]:
+            goal = item['pos']
+            if math.dist(goal[:2], zone['center']) > zone['radius'] - stats['radius']:
+                continue
+            if crate and not self.arena.clear_shot([*pos[:2], pos[2]+stats['muzzle_height']],
+                                                   [*goal[:2], goal[2]+1]):
+                continue
+            distance = math.dist(pos[:2], goal[:2])
+            dx, dy = unit(goal[0]-pos[0], goal[1]-pos[1])
+            # Survey the direct route the bot will actually follow. Adjacent
+            # three-metre checks cover obstacles between us and the pickup.
+            steps = max(1, math.ceil(distance/3))
+            for step in range(steps+1):
+                x, y = pos[0]+dx*distance*step/steps, pos[1]+dy*distance*step/steps
+                ground = self.arena.ground(x, y)
+                if abs(ground-pos[2]) > 4:
+                    break
+                if step < steps and not self.arena.clear_move([x,y,ground], (dx,dy), stats):
+                    break
+                if (step % 2 == 0 or step == steps) and any(
+                        self.arena.clear_shot([*e['pos'][:2], e['pos'][2]+7],
+                                              [x,y,ground+stats['height']*.65]) for e in enemies):
+                    break
+            else:
+                return item, crate
+        return None
 
     def update_recovery(self, hp):
         # Enter only below 25%; finish a recovery rather than oscillating at 25%.
@@ -186,11 +230,23 @@ class Combat:
         to_next = self.navigator.zone_distance(pos, zone, now)
         urgent = not me['in_zone'] or (to_next > 0 and now + to_next / stats['walk_speed'] + 8 >= zone['shrink_end'])
         self.zone_urgent = urgent
+        opening = now < 45 and me['cubes'] == 0
+        first = None
+        if opening and not urgent and not self.healing and zone['next_radius'] > 30 and now-self.last_threat[0] > 2:
+            first = self.opening_loot(obs, known_cubes, mechs)
+        self.first_cube_id = first[0]['id'] if first else None
         if urgent or zone['next_radius'] <= 30:
             goal = list(zone['next_center'])
         # Don't abandon an early duel just because a shrinking phase has begun.
         if not urgent and zone['next_radius'] > 30:
-            if pickup_candidates and min(pickup_candidates, key=lambda pair: pair[0])[0] < 80 and nearest > 35:
+            if first:
+                item, crate = first
+                goal = item['pos'][:2]
+                seeking_loot = True
+                if crate:
+                    target = dict(item, kind='crate', vel=[0,0,0])
+                    self.target_id = item['id']
+            elif pickup_candidates and min(pickup_candidates, key=lambda pair: pair[0])[0] < 80 and nearest > 35:
                 goal = min(pickup_candidates, key=lambda pair: pair[0])[1]['pos'][:2]
                 seeking_loot = True
             elif known_cubes and nearest > 40 and me['cubes'] < 10:
@@ -237,7 +293,7 @@ class Combat:
                 seeking_loot = True
                 seeking_cover = False
         travel_goal = goal
-        if math.dist(pos[:2], goal) > 15:
+        if (not first or supply) and math.dist(pos[:2], goal) > 15:
             travel_goal = self.navigator.waypoint(pos, goal, now)
 
         direction = unit(travel_goal[0] - x, travel_goal[1] - y)
