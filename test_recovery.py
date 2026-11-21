@@ -149,6 +149,22 @@ class RecoveryTests(unittest.TestCase):
         obs['t'] += 1
         self.assertLess(bot.act(obs)['move'][0], -.8)
 
+    def test_abandons_losing_lightning_duel(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        pos = me['pos']
+        me['weapons'][1] = dict(kind='lightning', cooldown=0,
+                                stats=self.hello['config']['weapons']['lightning'])
+        obs['mechs'] = [dict(id=(me['id']+1) % 16, kind='mech', hp=me['max_hp'],
+                             pos=[pos[0]+45, pos[1], pos[2]], vel=[0,0,0], weapons=['lightning'])]
+        bot.arena.clear_shot = lambda *args: True
+        bot.act(obs)
+        self.assertIsNone(bot.escape_direction)
+        me['hp'] *= .85
+        obs['t'] += .1
+        self.assertLess(bot.act(obs)['move'][0], -.8)
+        self.assertIsNotNone(bot.escape_direction)
+
     def test_two_distinct_mech_hits_trigger_escape_then_expire(self):
         bot, obs = self.scenario()
         obs['self']['cubes'] = 2

@@ -46,12 +46,17 @@ class Combat:
                     and e.get('bearing') is not None):
                 self.recent_hits[who] = (now, e['bearing'], e['weapon'])
         bearings = {who: hit[1] for who, hit in self.recent_hits.items()}
-        arc = {who for who, hit in self.recent_hits.items() if avoid_arc and hit[2] == 'lightning'}
+        arc = {who for who, hit in self.recent_hits.items()
+               if hit[2] == 'lightning' and (avoid_arc or me['hp'] < .5 * me['max_hp'])}
         pos = me['pos']
         for enemy in mechs:
             who, p = enemy['id'], enemy['pos']
-            if avoid_arc and 'lightning' in enemy.get('weapons', []) and math.dist(pos, p) <= 58:
-                arc.add(who)
+            if 'lightning' in enemy.get('weapons', []) and math.dist(pos, p) <= 58:
+                losing_trade = me['hp'] < .9 * me['max_hp'] and enemy.get('hp', 0) > me['hp']
+                if avoid_arc or losing_trade:
+                    arc.add(who)
+                else:
+                    arc.discard(who)
             if who in bearings or who in arc:
                 bearings[who] = math.atan2(p[1] - pos[1], p[0] - pos[0])
         starter = now < 45 and me['cubes'] == 0 and sum(w is not None for w in me['weapons']) == 1
