@@ -165,6 +165,21 @@ class BotTests(unittest.TestCase):
         self.assertAlmostEqual(action['aim'][0], 0)
         enemy['hp'] = 1400
         self.assertTrue(bot.act(obs)['fire'][1])
+        # A damaged visible mech is worth finishing even if a fresh one is
+        # closer; a mortar carrier is vulnerable to our laser cook-off.
+        enemy['hp'] = 1400
+        enemy['pos'] = [pos[0] + 80, pos[1], pos[2]]
+        weak = dict(enemy, id=100, hp=600, pos=[pos[0] + 130, pos[1], pos[2]])
+        obs['mechs'] = [enemy, weak]
+        bot.target_id = None
+        bot.act(obs)
+        self.assertEqual(bot.target_id, 100)
+        weak.update(hp=1400, pos=[pos[0] + 100, pos[1], pos[2]], weapons=['gun', 'mortar'])
+        enemy['pos'] = [pos[0] + 70, pos[1], pos[2]]
+        bot.target_id = None
+        bot.act(obs)
+        self.assertEqual(bot.target_id, 100)
+
 
 
 if __name__ == '__main__':

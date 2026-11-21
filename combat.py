@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-finisher-v14'
+    name = 'Oval-Sentinel-focus-v20'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -155,6 +155,12 @@ class Combat:
             if not self.arena.clear_shot(origin, [*m['pos'][:2], top]):
                 continue
             value = distance + m.get('hp', 1400) * .045
+            if m['kind'] == 'mech':
+                # Finish damaged opponents before spreading damage across
+                # fresh ones. Laser cook-off reduces a mortar carrier's
+                # effective health against the combined gun/laser loadout.
+                weakness = 1.35 if 'laser' in by_kind and 'mortar' in m.get('weapons', []) else 1
+                value = distance * .5 + m.get('hp', 1400) * .075 / weakness
             if m['kind'] == 'npc':
                 value += 45
             if m['id'] == self.target_id:
