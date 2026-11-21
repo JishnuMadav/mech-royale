@@ -27,6 +27,8 @@ class Combat:
         self.pickup_memory = {}
         self.cube_memory = {}
         self.last_threat = (-100, 0)
+        self.progress_pos = None
+        self.progress_at = 0
 
     def aim_at(self, me, target, kind, weapon):
         scale = 1 + 0.05 * target.get('cubes', 0)
@@ -314,6 +316,16 @@ class Combat:
         else:
             self.stuck = 0
         self.previous = list(pos)
+        if self.progress_pos is None or direction == (0, 0):
+            self.progress_pos, self.progress_at = list(pos), now
+        elif now - self.progress_at >= 3:
+            if math.dist(pos, self.progress_pos) < 4 and me['grounded'] and me['energy'] > 35:
+                # Oscillating at a corner is movement but not route progress.
+                # Escape vertically before the shrinking zone makes it fatal.
+                action['jump'] = True
+                self.jet_until = now + 4
+                self.navigator.route_after = -1
+            self.progress_pos, self.progress_at = list(pos), now
         if (self.stuck > 10 or not candidates) and me['grounded'] and me['energy'] > 60:
             action['jump'] = True
             self.jet_until = now + 4
