@@ -8,12 +8,30 @@ import unittest
 from bot import Bot, inside, lead
 from survivor import Survivor
 from combat import Combat
+from navigation import Navigator
 
 
 ROOT = Path(__file__).resolve().parent
 
 
 class BotTests(unittest.TestCase):
+    def test_route_around_obstacle(self):
+        class Map:
+            bounds = {'minX': -60, 'maxX': 60, 'minY': -60, 'maxY': 60}
+            def ground(self, x, y):
+                return 0
+            def solid(self, x, y, low, high):
+                return -10 <= x <= 10 and -20 <= y <= 20
+        nav = Navigator(Map())
+        path = nav.path([-40, 0, 0], [40, 0])
+        self.assertTrue(path)
+        self.assertEqual(path[-1][:2], (40, 0))
+        self.assertGreater(max(abs(p[1]) for p in path), 20)
+        for a, b in zip(path, path[1:]):
+            for fraction in (.25, .5, .75):
+                x, y = (a[i] + fraction * (b[i] - a[i]) for i in range(2))
+                self.assertFalse(Map().solid(x, y, 0, 9))
+
     def test_intercept(self):
         target = {'pos': [100, 0, 0], 'vel': [0, 10, 0]}
         point = lead([0, 0, 0], target, 100)

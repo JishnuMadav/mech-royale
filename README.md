@@ -3,12 +3,14 @@
 Python bot for the 2026 Builders Buildathon Mech Royale track.
 No third-party runtime dependencies. The root Dockerfile is the submission entrypoint.
 
-This branch tests `combat.py`, a combat and sustain candidate built on the original
+This branch tests `combat.py`, a combat and cover candidate built on the original
 bot's geometry helpers and the rooftop candidate's indexed terrain model. It
 prioritizes a laser early, selects weapon-specific aim, manages laser release
 and mortar trajectories, strafes during fights, protects reloads, and lets
 lightning recharge between bursts. It holds territory until zone travel is
-necessary instead of automatically moving toward a crowded center.
+necessary instead of automatically moving toward a crowded center. A bounded
+ground-route planner steers around buildings, and wounded mechs seek reachable
+cover while continuing to defend themselves until they break line of sight.
 `survivor.py` remains available for comparison but is not the entrypoint here.
 The initial baseline remains at commit `d4b7934b5ccbc02b6f29859bb9db385f0829ec4e`.
 
@@ -18,11 +20,11 @@ The initial baseline remains at commit `d4b7934b5ccbc02b6f29859bb9db385f0829ec4e
 - Strafe and maintain distance from opponents, retreating at low health.
 - Avoid building prisms, map boundaries, and shots into building cover.
 - Lead moving targets and fire only when the actual torso aim is aligned.
-- Collect nearby cubes and lightning weapons; prioritize survival upgrades.
+- Collect nearby cubes and a second weapon; favor lasers and sustain upgrades.
 - Manage reloads and energy reserves; jump/jet when stuck.
 
-This is an initial heuristic entry, not a measured competitive result. Navigation
-uses local sampled prism checks, not global pathfinding or terrain slope analysis.
+This is an experimental heuristic entry. Navigation combines a ground grid with
+local collision checks; rooftops still use local steering.
 The starter recording cannot measure placement or validate movement in a live game.
 Only scored practice matches establish playing strength.
 
@@ -53,8 +55,10 @@ within budget, median 2.5 ms, p99 7.4 ms, maximum 11.2 ms. These are protocol
 measurements, not evidence of better placement; its practice score was 0.44
 (receipt BB-D8559723), so it did not replace the baseline as the selected entry.
 The combat-v3 candidate scored 3.67 (receipt BB-9D2EC473, commit
-`5dbeec64befaf446c7f43aa76fc9fa1a31630319`) and became the best entry. The v4
-changes are experimental until their scored practice run is complete.
+`5dbeec64befaf446c7f43aa76fc9fa1a31630319`) and became the best entry. Sustain-v4
+also scored 3.67 (receipt BB-AA2FFC04, commit
+`cd85a4b0bed134e019b07006e089bf3261a55ac9`); the earlier v3 remains selected.
+The v5 cover changes are experimental until scored practice is complete.
 
 ## Submission
 
@@ -72,6 +76,7 @@ per hour. Keep the repository public until results are published.
 directory; the submission does not need the kit because the scorer mounts its map.
 The kit was downloaded on 2026-11-21 and includes the original
 example bots, protocol, schema, test recording, and arena. Our bot implementation
-is in `bot.py`. No other pre-existing bot code or external libraries are used.
+is in `bot.py`, `survivor.py`, `combat.py`, and `navigation.py`. No other
+pre-existing bot code or external runtime libraries are used.
 
 Project code is released under the MIT License as required by the Buildathon.

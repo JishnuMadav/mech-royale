@@ -3,11 +3,12 @@ import math
 
 from bot import angle_delta, lead, unit
 from survivor import TerrainArena
+from navigation import Navigator
 import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-sustain-v4'
+    name = 'Oval-Sentinel-cover-v5'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -19,6 +20,10 @@ class Combat:
         self.boosting = False
         self.target_id = None
         self.arc_resting = False
+        self.navigator = Navigator(self.arena)
+        self.cover_goal = None
+        self.cover_after = -1
+        self.healing = False
 
     def aim_at(self, me, target, kind, weapon):
         scale = 1 + 0.05 * target.get('cubes', 0)
@@ -73,7 +78,12 @@ class Combat:
         mechs = [m for m in obs['mechs'] if m['kind'] == 'mech']
         nearest = min((math.dist(pos, m['pos']) for m in mechs), default=1e9)
         close_count = sum(math.dist(pos, m['pos']) < 100 for m in mechs)
-        recovering = hp < 0.4 and nearest > 60
+        if hp > .90:
+            self.healing = False
+            self.cover_goal = None
+        elif hp < .60:
+            self.healing = True
+        recovering = self.healing and nearest > 55
         if obs['offer']:
             ranks = {'gun_damage': 88, 'gun_rate': 86, 'gun_mag': 85, 'plating': 100, 'armor': 94,
                      'servos': 95, 'nanites': 96 if hp < .55 else 80, 'reactor': 77, 'jets': 70, 'capacitor': 60,
@@ -146,11 +156,23 @@ class Combat:
             elif target and target['kind'] != 'mech':
                 goal = target['pos'][:2]
 
-        direction = unit(goal[0] - x, goal[1] - y)
-        if target and target['kind'] == 'mech' and not urgent and not seeking_weapon and zone['next_radius'] > 20:
+        if self.healing and mechs and now >= self.cover_after:
+            self.cover_goal = self.navigator.cover(pos, mechs, zone)
+            self.cover_after = now + 2
+        seeking_cover = self.healing and self.cover_goal is not None and not urgent
+        if seeking_cover:
+            goal = self.cover_goal[:2]
+        travel_goal = goal
+        if math.dist(pos[:2], goal) > 15:
+            travel_goal = self.navigator.waypoint(pos, goal, now)
+
+        direction = unit(travel_goal[0] - x, travel_goal[1] - y)
+        if target and target['kind'] == 'mech' and not urgent and not seeking_weapon and not seeking_cover and zone['next_radius'] > 20:
             ex, ey = unit(target['pos'][0] - x, target['pos'][1] - y)
             distance = math.dist(pos, target['pos'])
             preferred = (60 if self.arc_resting else 35) if 'lightning' in by_kind else 90 if 'laser' in by_kind else 60
+            if 'lightning' in target.get('weapons', []) and 'laser' in by_kind:
+                preferred = 110
             if hp < 0.35 or close_count >= 3:
                 preferred += 40
             radial = max(-1.3, min(1.2, (distance - preferred) / 25))
@@ -179,7 +201,9 @@ class Combat:
                     aim, muzzle, point = solution
                     action['aim'] = aim
                     aligned = self.aligned(me, aim, distance)
-                    can_fight = not recovering or target.get('hp', 1400) < 200
+                    # Keep defending while exposed. Stopping in the open cannot
+                    # start regeneration because incoming hits reset its timer.
+                    can_fight = not (seeking_cover and math.dist(pos[:2], goal) < 8 and target['kind'] != 'mech')
                     if weapon['kind'] == 'gun':
                         action['fire'][slot] = bool(can_fight and aligned and distance < weapon['stats']['range'] and weapon.get('ammo', 0) > 0 and self.arena.clear_shot(muzzle, point))
                     elif weapon['kind'] == 'mortar':
@@ -195,6 +219,8 @@ class Combat:
         if 'gun' in by_kind:
             gun = by_kind['gun'][1]
             action['reload'] = bool(gun.get('ammo', 0) == 0 or (target is None and nearest > 100 and gun.get('ammo', 0) <= gun['stats']['mag'] - 3))
+        if self.healing and target is None and nearest > 55:
+            action['fire'] = [False, False]
         return action
 
     def navigate(self, action, obs, direction):
