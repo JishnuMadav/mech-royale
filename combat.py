@@ -1,5 +1,6 @@
 """Combat candidate: early loot, weapon-specific aiming, strafing and recovery."""
 import math
+import time
 
 from bot import angle_delta, lead, unit
 from survivor import TerrainArena
@@ -8,7 +9,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-recovery-v26'
+    name = 'Oval-Sentinel-recovery-v33'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -27,6 +28,10 @@ class Combat:
         self.pickup_memory = {}
         self.cube_memory = {}
         self.last_threat = (-100, 0)
+        self.attackers = {}
+        self.crossfire_until = -1
+        self.crossfire_check = -1
+        self.crossfire_move = None
         self.progress_pos = None
         self.progress_at = 0
         self.zone_urgent = False
@@ -99,9 +104,18 @@ class Combat:
         pos, stats = me['pos'], me['stats']
         x, y, z = pos
         hp = me['hp'] / me['max_hp']
+        self.attackers = {who: hit for who, hit in self.attackers.items() if now-hit[0] <= 5}
         for event in obs['events']:
             if event['type'] == 'damaged' and event.get('bearing') is not None:
                 self.last_threat = (now, event['bearing'])
+                who = event.get('by')
+                if who in range(16) and who != me['id']:
+                    previous = self.attackers.get(who)
+                    if ((previous is None or now-previous[0] > 3)
+                            and any(other != who and now-hit[0] <= 3 for other,hit in self.attackers.items())):
+                        self.crossfire_until = now + 2
+                        self.crossfire_check = -1
+                    self.attackers[who] = self.last_threat
         weapons = me['weapons']
         action = {'tick': obs['tick'], 'fire': [False, False], 'boost': False, 'jump': False}
         by_kind = {w['kind']: (i, w) for i, w in enumerate(weapons) if w}
@@ -257,6 +271,9 @@ class Combat:
         if supply and math.dist(pos[:2], supply['pos'][:2]) < supply['radius'] - 3:
             direction = (0, 0)
         self.navigate(action, obs, direction)
+        if (now < self.crossfire_until and me['grounded'] and not urgent and not seeking_cover
+                and not supply and any(action['move'])):
+            self.crossfire_step(action, obs, mechs, target)
         action['aim'] = [me['aim'][0] + .3, 0]
         if now - self.last_threat[0] < 2:
             action['aim'] = [self.last_threat[1], 0]
@@ -311,6 +328,61 @@ class Combat:
         if self.healing and target is None and nearest > 55:
             action['fire'] = [False, False]
         return action
+
+    def crossfire_step(self, action, obs, mechs, target):
+        me, now, zone = obs['self'], obs['t'], obs['zone']
+        pos, stats = me['pos'], me['stats']
+        if now < self.crossfire_check:
+            if self.crossfire_move and self.arena.clear_move(pos, self.crossfire_move, stats):
+                action['move'] = list(self.crossfire_move)
+            return
+        self.crossfire_check, self.crossfire_move = now + .4, None
+        if abs(pos[2] - self.arena.ground(*pos[:2])) > 3:
+            return
+        # Only two actual damage sources drive this short movement adjustment.
+        # A hidden source supplies a bearing, never an invented map position.
+        reports = sorted(self.attackers.items(), key=lambda hit: hit[1][0], reverse=True)[:2]
+        if len(reports) < 2:
+            return
+        seen = {m['id']: m for m in mechs}
+        eyes, bearings = [], []
+        for who, (_, bearing) in reports:
+            if who in seen:
+                p = seen[who]['pos']
+                eyes.append([p[0], p[1], p[2]+7])
+                bearing = math.atan2(p[1]-pos[1], p[0]-pos[0])
+            bearings.append((math.cos(bearing), math.sin(bearing)))
+        target_eye = None
+        if target and target['kind'] == 'mech':
+            p = target['pos']
+            target_eye = [p[0], p[1], p[2]+4.5]
+        base = action['move']
+        yaw = math.atan2(base[1], base[0])
+        deadline = time.perf_counter() + .004
+        best = None
+        for offset in (0, .7, -.7, 1.4, -1.4, 2.1, -2.1, math.pi):
+            if time.perf_counter() >= deadline:
+                break
+            direction = (math.cos(yaw+offset), math.sin(yaw+offset))
+            foot = list(pos)
+            for _ in range(4):
+                if not self.arena.clear_move(foot, direction, stats):
+                    break
+                x, y = foot[0]+3*direction[0], foot[1]+3*direction[1]
+                foot = [x, y, self.arena.ground(x, y)]
+            else:
+                if math.dist(foot[:2], zone['center']) > zone['radius']-stats['radius']:
+                    continue
+                body = [*foot[:2], foot[2]+stats['height']*.65]
+                exposed = sum(self.arena.clear_shot(eye, body) for eye in eyes)
+                loses_target = target_eye is not None and not self.arena.clear_shot(body, target_eye)
+                sideways = min(abs(direction[0]*vy-direction[1]*vx) for vx,vy in bearings)
+                score = -2*exposed - 1.5*loses_target + sideways + .6*math.cos(offset)
+                if best is None or score > best + .12:
+                    best = score
+                    self.crossfire_move = direction if offset else None
+        if self.crossfire_move:
+            action['move'] = list(self.crossfire_move)
 
     def navigate(self, action, obs, direction):
         me, zone, now = obs['self'], obs['zone'], obs['t']

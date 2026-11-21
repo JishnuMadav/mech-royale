@@ -113,6 +113,46 @@ class RecoveryTests(unittest.TestCase):
         nav.path = lambda *args: []
         self.assertGreaterEqual(nav.zone_distance([-50, 0, 0], zone, 3), 92)
 
+    def test_crossfire_requires_two_recent_opponents_and_expires(self):
+        bot, obs = self.scenario()
+        me = obs['self']['id']
+        a, b = (me+1)%16, (me+2)%16
+        def hit(who):
+            return dict(type='damaged', by=who, amount=45, weapon='gun', bearing=.5)
+        obs.update(t=10, events=[hit(a), hit(a), hit(me), hit(105), hit(None)])
+        bot.act(obs)
+        self.assertLess(bot.crossfire_until, 10)
+        obs.update(t=13.1, events=[hit(b)])
+        bot.act(obs)
+        self.assertLess(bot.crossfire_until, 13.1)
+        obs.update(t=13.5, events=[hit(a)])
+        bot.act(obs)
+        self.assertEqual(bot.crossfire_until, 15.5)
+        obs.update(t=15.6, events=[hit(a), hit(b)])
+        bot.act(obs)
+        self.assertEqual(bot.crossfire_until, 15.5)
+
+    def test_crossfire_step_prefers_a_wall_between_us_and_second_mech(self):
+        bot, obs = self.scenario()
+        x,y,z = obs['self']['pos']
+        obs['t'] = 3
+        bot.arena.ground = lambda *args: z
+        enemies = [dict(id=1, kind='mech',pos=[x+80,y,z]),dict(id=2,kind='mech',pos=[x,y+90,z])]
+        bot.attackers = {1:(2,0),2:(3,1.57)}
+        bot.arena.clear_shot = lambda start,end: not (start[1]>y+85 and end[1]<y-4)
+        action = dict(move=[1,0], aim=[0,0], fire=[True,False])
+        bot.crossfire_step(action,obs,enemies,enemies[0])
+        self.assertLess(action['move'][1], -.3)
+        self.assertEqual(action['aim'],[0,0])
+        self.assertEqual(action['fire'],[True,False])
+
+    def test_urgent_zone_rotation_keeps_priority_during_crossfire(self):
+        bot, obs = self.scenario()
+        obs['self']['in_zone'] = False
+        bot.crossfire_until = obs['t']+2
+        bot.crossfire_step = lambda *args: self.fail('urgent zone route must retain control')
+        bot.act(obs)
+
 
 if __name__ == '__main__':
     unittest.main()
