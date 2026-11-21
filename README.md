@@ -22,6 +22,7 @@ Only scored practice matches establish playing strength.
 From this directory (Python 3.12+):
 
 ```sh
+python3 setup_kit.py
 python3 -m unittest -v test_bot.py
 python3 mechfight-kit/check/check.py -- python3 -u bot.py
 docker build --platform linux/amd64 -t mech-royale:initial .
@@ -47,8 +48,10 @@ per hour. Keep the repository public until results are published.
 
 ## Attribution
 
-`mechfight.py` and everything in `mechfight-kit/` come from the organizer-provided
-Mech Royale starter kit downloaded on 2026-11-21. The kit includes the original
+`mechfight.py` comes from the organizer-provided Mech Royale starter kit.
+`setup_kit.py` downloads the exact kit used for validation into an ignored local
+directory; the submission does not need the kit because the scorer mounts its map.
+The kit was downloaded on 2026-11-21 and includes the original
 example bots, protocol, schema, test recording, and arena. Our bot implementation
 is in `bot.py`. No other pre-existing bot code or external libraries are used.
 
