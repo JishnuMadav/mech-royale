@@ -4,11 +4,12 @@ import math
 from bot import angle_delta, lead, unit
 from survivor import TerrainArena
 from navigation import Navigator
+from opening import Opening
 import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-recovery-v26'
+    name = 'Oval-Sentinel-opening-v36'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -21,6 +22,7 @@ class Combat:
         self.target_id = None
         self.arc_resting = False
         self.navigator = Navigator(self.arena)
+        self.opening = Opening(self.navigator)
         self.cover_goal = None
         self.cover_after = -1
         self.healing = False
@@ -236,8 +238,27 @@ class Combat:
                 goal = supply['pos'][:2]
                 seeking_loot = True
                 seeking_cover = False
+        opening_step = None
+        opening = (now < 30 and set(by_kind) == {'gun'} and me['cubes'] == 0 and not self.healing
+                   and not urgent and not supply and zone['next_radius'] > 30 and me['grounded']
+                   and abs(z - self.arena.ground(x, y)) <= 4)
+        if opening:
+            recent = [item for seen, item in self.pickup_memory.values() if now-seen < 1.5]
+            pickup_radius = self.config['loot']['pickup_radius']
+            in_reach = [p for p in obs['pickups'] if p['kind'] != 'gun' and abs(p['pos'][2]-z) <= 4
+                        and math.dist(pos[:2], p['pos'][:2]) <= pickup_radius]
+            if in_reach:
+                action['take'] = min(in_reach, key=lambda p: math.dist(pos, p['pos']))['id']
+            opening_step = self.opening.choose(me, zone, recent, mechs, now, pickup_radius)
+            if opening_step is not None:
+                goal = opening_step
+                seeking_loot = True
+            elif pickup_candidates and seeking_loot:
+                # A lost weapon race should not fall through to the baseline pickup chase.
+                goal = list(zone['next_center'])
+                seeking_loot = False
         travel_goal = goal
-        if math.dist(pos[:2], goal) > 15:
+        if opening_step is None and math.dist(pos[:2], goal) > 15:
             travel_goal = self.navigator.waypoint(pos, goal, now)
 
         direction = unit(travel_goal[0] - x, travel_goal[1] - y)
@@ -257,6 +278,8 @@ class Combat:
         if supply and math.dist(pos[:2], supply['pos'][:2]) < supply['radius'] - 3:
             direction = (0, 0)
         self.navigate(action, obs, direction)
+        if opening_step is not None and self.opening.mode == 'weapon' and me['energy'] > 30:
+            action['boost'] = math.dist(pos[:2], self.opening.route[-1][:2]) > self.config['loot']['pickup_radius']
         action['aim'] = [me['aim'][0] + .3, 0]
         if now - self.last_threat[0] < 2:
             action['aim'] = [self.last_threat[1], 0]

@@ -113,6 +113,45 @@ class RecoveryTests(unittest.TestCase):
         nav.path = lambda *args: []
         self.assertGreaterEqual(nav.zone_distance([-50, 0, 0], zone, 3), 92)
 
+    def test_opening_races_reachable_weapon_and_yields_a_close_contest(self):
+        bot, obs = self.scenario()
+        me, zone = obs['self'], obs['zone']
+        x, y, z = me['pos']
+        weapon = dict(id=8001, kind='laser', pos=[x+25,y,z])
+        edge = (x,y+14,z)
+        bot.opening.edges = [edge]
+        reach = bot.config['loot']['pickup_radius']
+        bot.opening.route_to = lambda pos,q,stats: ([q], 25 if q == weapon['pos'] else 14)
+        self.assertEqual(bot.opening.choose(me,zone,[weapon],[],0,reach),weapon['pos'][:2])
+        rival = dict(id=3,pos=[x+27,y,z])
+        self.assertEqual(bot.opening.choose(me,zone,[weapon],[rival],.1,reach),edge[:2])
+        self.assertEqual(bot.opening.mode,'edge')
+        bot.opening.route_to = lambda pos,q,stats: ([],float('inf')) if q == weapon['pos'] else ([q],14)
+        self.assertEqual(bot.opening.choose(me,zone,[weapon],[],2,reach),edge[:2])
+
+    def test_opening_takes_weapon_in_horizontal_radius_and_exits_on_growth(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        me.update(cubes=0,grounded=True)
+        x,y,_ = me['pos']
+        z = bot.arena.ground(x,y)
+        me['pos'][2] = z
+        me['weapons'][1] = None
+        r = bot.config['loot']['pickup_radius']
+        obs['pickups'] = [dict(id=8001,kind='lightning',pos=[x+r-.1,y,z+3.9])]
+        self.assertEqual(bot.act(obs)['take'],8001)
+        def unexpected(*args):
+            self.fail('Opening route used after its entry condition expired')
+        bot.opening.choose = unexpected
+        me['cubes'] = 1
+        bot.act(obs)
+        me['cubes'] = 0
+        me['in_zone'] = False
+        bot.act(obs)
+        me['in_zone'] = True
+        obs['t'] = 30
+        bot.act(obs)
+
 
 if __name__ == '__main__':
     unittest.main()
