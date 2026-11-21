@@ -156,6 +156,16 @@ class BotTests(unittest.TestCase):
         self.assertFalse(action['fire'][1])
         self.assertAlmostEqual(action['aim'][0], 0)
 
+        # A close arc disables the beam. Preserve movement speed until safely
+        # outside its reach, then allow normal charging again.
+        obs['self']['weapons'][1]['charge'] = 0
+        enemy['weapons'] = ['gun', 'lightning']
+        for distance in (60, 90):
+            enemy['pos'] = [pos[0] + distance, pos[1], pos[2]]
+            self.assertFalse(bot.act(obs)['fire'][1])
+        enemy['pos'] = [pos[0] + 110, pos[1], pos[2]]
+        self.assertTrue(bot.act(obs)['fire'][1])
+
 
 if __name__ == '__main__':
     unittest.main()

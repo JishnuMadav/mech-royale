@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-laserfix-v8'
+    name = 'Oval-Sentinel-anti-arc-v11'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -29,6 +29,7 @@ class Combat:
         self.last_threat = (-100, 0)
         self.progress_pos = None
         self.progress_at = 0
+        self.laser_retreat = False
 
     def aim_at(self, me, target, kind, weapon):
         scale = 1 + 0.05 * target.get('cubes', 0)
@@ -94,6 +95,9 @@ class Combat:
             self.arc_resting = True
         mechs = [m for m in obs['mechs'] if m['kind'] == 'mech']
         nearest = min((math.dist(pos, m['pos']) for m in mechs), default=1e9)
+        arc_enemy = min((m for m in mechs if 'lightning' in m.get('weapons', [])), key=lambda m: math.dist(pos, m['pos']), default=None)
+        nearest_arc = math.dist(pos, arc_enemy['pos']) if arc_enemy else 1e9
+        self.laser_retreat = nearest_arc < (95 if self.laser_retreat else 75)
         close_count = sum(math.dist(pos, m['pos']) < 100 for m in mechs)
         if hp > .90:
             self.healing = False
@@ -211,15 +215,20 @@ class Combat:
 
         direction = unit(travel_goal[0] - x, travel_goal[1] - y)
         if target and target['kind'] == 'mech' and not urgent and not seeking_loot and not seeking_cover and zone['next_radius'] > 20:
-            ex, ey = unit(target['pos'][0] - x, target['pos'][1] - y)
-            distance = math.dist(pos, target['pos'])
+            movement_target = arc_enemy if self.laser_retreat and 'laser' in by_kind and arc_enemy else target
+            ex, ey = unit(movement_target['pos'][0] - x, movement_target['pos'][1] - y)
+            distance = math.dist(pos, movement_target['pos'])
             preferred = (60 if self.arc_resting else 35) if 'lightning' in by_kind else 90 if 'laser' in by_kind else 60
             if 'lightning' in target.get('weapons', []) and 'laser' in by_kind:
                 preferred = 110
             if hp < 0.35 or close_count >= 3:
                 preferred += 40
+            if self.laser_retreat and 'laser' in by_kind:
+                preferred = max(preferred, 125)
             radial = max(-1.3, min(1.2, (distance - preferred) / 25))
             strafe = self.side * (1 if int(now / 2.2) % 2 == 0 else -1)
+            if self.laser_retreat and 'laser' in by_kind:
+                strafe *= .35
             direction = unit(ex * radial - ey * strafe, ey * radial + ex * strafe)
         if math.dist(pos[:2], goal) < 2 and target is None:
             direction = (0, 0)
@@ -241,7 +250,8 @@ class Combat:
             # Observed charge is rounded to 2 decimals, while upgraded charge
             # duration is rounded to 3 (.56 versus .563). Without tolerance a
             # full beam waits for the automatic two-second hold timeout.
-            if laser and laser[1].get('charge', 0) + .01 >= laser[1]['stats']['charge']:
+            if laser and (laser[1].get('charge', 0) + .01 >= laser[1]['stats']['charge']
+                          or (self.laser_retreat and laser[1].get('charge', 0) > 0)):
                 chosen = laser
             elif mortar and mortar[1]['cooldown'] <= .05 and distance > 25:
                 chosen = mortar
@@ -262,8 +272,8 @@ class Combat:
                     elif weapon['kind'] == 'mortar':
                         action['fire'][slot] = bool(can_fight and aligned)
                     if laser and distance < laser[1]['stats']['range'] and can_fight:
-                        charged = laser[1].get('charge', 0) + .01 >= laser[1]['stats']['charge']
-                        action['fire'][laser[0]] = bool(not charged or not (weapon['kind'] == 'laser' and aligned))
+                        release = laser[1].get('charge', 0) + .01 >= laser[1]['stats']['charge'] or self.laser_retreat
+                        action['fire'][laser[0]] = bool((not release) or (laser[1].get('charge', 0) > 0 and not (weapon['kind'] == 'laser' and aligned)))
                     lightning = by_kind.get('lightning')
                     if lightning:
                         w = lightning[1]
@@ -333,7 +343,7 @@ class Combat:
             action['jump'] = True
             self.jet_until = now + 4
         nearest = min((math.dist(pos, e['pos']) for e in enemies), default=1e9)
-        danger = not me['in_zone'] or me['hp'] < me['max_hp'] * .55 or ('laser' in kinds and nearest < 65)
+        danger = not me['in_zone'] or me['hp'] < me['max_hp'] * .55 or ('laser' in kinds and (nearest < 65 or self.laser_retreat))
         if self.boosting:
             self.boosting = danger and me['energy'] > 20
         else:
