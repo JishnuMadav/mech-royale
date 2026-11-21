@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-terrain-loot-v15'
+    name = 'Oval-Sentinel-terrain-finisher-v16'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -65,6 +65,23 @@ class Combat:
             point = center
         dx, dy, dz = [point[i] - origin[i] for i in range(3)]
         return [math.atan2(dy, dx), math.atan2(dz, math.hypot(dx, dy))], origin, point
+
+    def laser_should_release(self, me, target, weapon):
+        stats = weapon['stats']
+        charge = weapon.get('charge', 0)
+        if charge + .01 >= stats['charge']:
+            return True
+        if charge < stats['min_charge']:
+            return False
+        damage = stats['damage'] * (1 + .04 * min(10, me['cubes']))
+        damage *= stats['min_frac'] + (1 - stats['min_frac']) * charge / stats['charge']
+        if target.get('kind') == 'mech':
+            # Enemy upgrades are hidden. Assume all three armor stacks and
+            # leave a margin for rounded HP and observations between ticks.
+            damage *= .76
+            if 'mortar' in target.get('weapons', []):
+                damage *= 1 + stats['cookoff']
+        return damage >= target.get('hp', math.inf) + 15
 
     def aligned(self, me, aim, distance, radius=2.0):
         # The server slews the torso before simulating shots. Permit a trigger
@@ -247,7 +264,7 @@ class Combat:
             # Observed charge is rounded to 2 decimals, while upgraded charge
             # duration is rounded to 3 (.56 versus .563). Without tolerance a
             # full beam waits for the automatic two-second hold timeout.
-            if laser and laser[1].get('charge', 0) + .01 >= laser[1]['stats']['charge']:
+            if laser and self.laser_should_release(me, target, laser[1]):
                 chosen = laser
             elif mortar and mortar[1]['cooldown'] <= .05 and distance > 25:
                 chosen = mortar
@@ -268,7 +285,7 @@ class Combat:
                     elif weapon['kind'] == 'mortar':
                         action['fire'][slot] = bool(can_fight and aligned)
                     if laser and distance < laser[1]['stats']['range'] and can_fight:
-                        charged = laser[1].get('charge', 0) + .01 >= laser[1]['stats']['charge']
+                        charged = self.laser_should_release(me, target, laser[1])
                         action['fire'][laser[0]] = bool(not charged or not (weapon['kind'] == 'laser' and aligned))
                     lightning = by_kind.get('lightning')
                     if lightning:

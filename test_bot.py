@@ -167,6 +167,16 @@ class BotTests(unittest.TestCase):
         self.assertFalse(action['fire'][1])
         self.assertAlmostEqual(action['aim'][0], 0)
 
+        # A conservative lethal partial beam should finish the target now,
+        # while the same charge must keep building against a healthy mech.
+        obs['self']['weapons'][1]['charge'] = .2
+        enemy['hp'] = 80
+        action = bot.act(obs)
+        self.assertFalse(action['fire'][1])
+        self.assertAlmostEqual(action['aim'][0], 0)
+        enemy['hp'] = 1400
+        self.assertTrue(bot.act(obs)['fire'][1])
+
         # An inaccessible nearest rooftop cube must not hide a farther ground
         # cube. Choose a travel goal from reachable loot before taking min().
         obs['mechs'], obs['pickups'], obs['crates'], obs['drops'] = [], [], [], []
