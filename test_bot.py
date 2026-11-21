@@ -49,6 +49,64 @@ class BotTests(unittest.TestCase):
         travel_time = math.dist([0, 0, 0], point) / 100
         self.assertAlmostEqual(point[1], 10 * travel_time)
 
+    def test_zone_distance_accounts_for_detour_and_failed_search(self):
+        class Map:
+            bounds = {'minX': -80, 'maxX': 80, 'minY': -80, 'maxY': 80}
+            def ground(self, x, y):
+                return 0
+            def solid(self, x, y, low, high):
+                return -10 <= x <= 10 and -40 <= y <= 40
+        nav = Navigator(Map())
+        zone = {'next_center': [50, 0], 'next_radius': 20}
+        distance = nav.zone_distance([-50, 0, 0], zone, 0)
+        self.assertGreater(distance, 120)  # Straight-line entry is only 92 m.
+        self.assertEqual(nav.zone_distance([50, 0, 0], zone, .1), 0)
+        nav.path = lambda *args: []
+        self.assertGreaterEqual(nav.zone_distance([-50, 0, 0], zone, 3), 92)
+
+    def test_urgent_zone_travel_does_not_stop_for_supply(self):
+        with gzip.open(ROOT / 'mechfight-kit/check/stream.jsonl.gz', 'rt') as stream:
+            messages = [json.loads(line) for line in stream if line.strip()]
+        hello = next(m for m in messages if m['type'] == 'hello')
+        hello['map']['dir'] = str(ROOT / 'mechfight-kit/arena')
+        bot = Combat(hello)
+        obs = next(m for m in messages if m['type'] == 'obs')
+        pos = obs['self']['pos']
+        obs['self']['hp'] = obs['self']['max_hp'] * .5
+        obs['self']['in_zone'] = False
+        obs['mechs'], obs['pickups'], obs['cubes'], obs['crates'] = [], [], [], []
+        obs['zone'].update(center=[pos[0] + 50, pos[1]], next_center=[pos[0] + 50, pos[1]], radius=40, next_radius=100)
+        obs['drops'] = [{'id': 20000, 'pos': [pos[0] + 1, pos[1], pos[2]], 'radius': 8,
+                         'lands_in': 0, 'capture_s': 4, 'progress': 1, 'holder': obs['self']['id']}]
+        bot.navigator.waypoint = lambda pos, goal, now: goal
+        bot.arena.clear_move = lambda *args: True
+        action = bot.act(obs)
+        self.assertTrue(bot.zone_urgent)
+        self.assertGreater(action['move'][0], .8)
+
+    def test_squad_steering_breaks_firing_lines(self):
+        with gzip.open(ROOT / 'mechfight-kit/check/stream.jsonl.gz', 'rt') as stream:
+            messages = [json.loads(line) for line in stream if line.strip()]
+        hello = next(m for m in messages if m['type'] == 'hello')
+        hello['map']['dir'] = str(ROOT / 'mechfight-kit/arena')
+        bot = Combat(hello)
+        obs = next(m for m in messages if m['type'] == 'obs')
+        pos = obs['self']['pos']
+        obs['zone'].update(center=pos[:2], radius=250)
+        obs['self']['vel'] = [0, 0, 0]
+        obs['projectiles'] = []
+        obs['mechs'] = [dict(id=i, kind='mech', hp=1400, cubes=0,
+                             pos=[pos[0] + 100, pos[1] + dy, pos[2]])
+                        for i, dy in enumerate((-10, 10))]
+        bot.arena.clear_move = lambda *args: True
+        bot.arena.ground = lambda *args: pos[2]
+        # A wall shields the southward options from both enemies.
+        bot.arena.clear_shot = lambda origin, end: end[1] >= pos[1] - 2
+        action = {}
+        bot.navigate(action, obs, (1, 0))
+        self.assertLess(action['move'][1], -.2)
+        self.assertGreater(action['move'][0], .8)
+
     def test_polygon(self):
         ring = [0, 0, 10, 0, 10, 10, 0, 10]
         self.assertTrue(inside(5, 5, ring))

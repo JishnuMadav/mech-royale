@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-finisher-v14'
+    name = 'Oval-Sentinel-squad-zone-v25'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -29,6 +29,7 @@ class Combat:
         self.last_threat = (-100, 0)
         self.progress_pos = None
         self.progress_at = 0
+        self.zone_urgent = False
 
     def aim_at(self, me, target, kind, weapon):
         scale = 1 + 0.05 * target.get('cubes', 0)
@@ -178,8 +179,10 @@ class Combat:
             # place cannot reveal loot on the other side of the building.
             goal = list(zone['next_center'])
         seeking_loot = False
-        to_next = max(0, math.dist(pos[:2], zone['next_center']) - zone['next_radius'] + 12)
-        urgent = not me['in_zone'] or (to_next > 0 and now + to_next / stats['walk_speed'] + 8 >= zone['shrink_end'])
+        to_next = self.navigator.zone_distance(pos, zone, now)
+        # Allow for turning, combat strafing and terrain along the actual route.
+        urgent = not me['in_zone'] or (to_next > 0 and now + to_next / (stats['walk_speed'] * .8) + 12 >= zone['shrink_end'])
+        self.zone_urgent = urgent
         if urgent or zone['next_radius'] <= 30:
             goal = list(zone['next_center'])
         # Don't abandon an early duel just because a shrinking phase has begun.
@@ -196,14 +199,18 @@ class Combat:
             elif target and target['kind'] != 'mech':
                 goal = target['pos'][:2]
 
-        if self.healing and mechs and now >= self.cover_after:
+        exposed = [enemy for _, enemy in targets if enemy['kind'] == 'mech'
+                   and math.dist(pos, enemy['pos']) < 150]
+        outnumbered = len(exposed) >= 2 and hp < .85
+        needs_cover = self.healing or outnumbered
+        if needs_cover and mechs and now >= self.cover_after:
             self.cover_goal = self.navigator.cover(pos, mechs, zone)
             self.cover_after = now + 2
-        seeking_cover = self.healing and self.cover_goal is not None and not urgent
+        seeking_cover = needs_cover and self.cover_goal is not None and not urgent
         if seeking_cover:
             goal = self.cover_goal[:2]
         supply = None
-        if hp < .85 or me['cubes'] < 10:
+        if not urgent and (hp < .85 or me['cubes'] < 10):
             options = []
             for drop in obs['drops']:
                 distance = math.dist(pos, drop['pos'])
@@ -304,6 +311,10 @@ class Combat:
         if self.healing:
             separation += 25
         candidates = []
+        # Break multiple firing lines, rather than only increasing distance.
+        # Bound the work to three nearby opponents and twelve movement options.
+        threats = [e for e in enemies if math.dist(pos, e['pos']) < 160][:3]
+        avoid_exposure = self.healing or len(threats) >= 2
         for offset in (0, .35, -.35, .7, -.7, 1.2, -1.2, 1.7, -1.7, 2.3, -2.3, math.pi):
             d = (math.cos(yaw + offset), math.sin(yaw + offset))
             if not self.arena.clear_move(pos, d, stats):
@@ -317,6 +328,14 @@ class Combat:
             for enemy in enemies:
                 distance = math.dist(future, enemy['pos'][:2])
                 score -= 8 * max(0, 1 - distance / separation) ** 2
+            if avoid_exposure:
+                future_z = max(pos[2], self.arena.ground(*future))
+                body = [*future, future_z + stats['height'] * .65]
+                visible = sum(self.arena.clear_shot(
+                    [*e['pos'][:2], e['pos'][2] + 7 * (1 + .05 * e.get('cubes', 0))], body)
+                    for e in threats)
+                # Zone travel still has priority: do not hide outside the ring.
+                score -= visible * (.25 if self.zone_urgent else .75)
             for projectile in obs['projectiles'][:30]:
                 rel = [projectile['pos'][i] - pos[i] for i in range(2)]
                 velocity = [projectile['vel'][i] - d[i] * stats['walk_speed'] for i in range(2)]

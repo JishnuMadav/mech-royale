@@ -12,9 +12,26 @@ The selected entry scores **5.81** in official practice (48 matches).
 - Repository: https://github.com/JishnuMadav/mech-royale
 - Track: https://www.joinbuilders.org/buildathon/tracks/builders
 
-The development target is **strictly greater than 6**. It has not yet been
+The development target is **strictly greater than 6.31**. It has not yet been
 reached. The site retains the best scored entry while experimental branches
 are evaluated. Private free-for-all games are diagnostics, not practice scores.
+
+## Candidate: squad survival and zone travel (v25)
+
+This branch is an **unscored candidate** based on the selected 5.81 runtime.
+It retains the selected 90 m laser preference. Movement favors breaking firing
+lines from nearby opponents, and seeks cover earlier when two enemies can see
+the bot and health is below 85%. Zone departure uses cached obstacle-route
+length, a travel-speed allowance and a 12-second margin. Urgent zone travel
+takes priority over supply capture.
+
+Ten regression checks pass, including obstacle detours, shelter from multiple
+opponents and zone escape taking priority over a nearby supply. Three restricted
+Docker checks each answered 300/300 observations within 50 ms: the official kit
+stream (maximum 20.1 ms), a private replay interval (22.0 ms), and a synthetic
+15-opponent stress stream (25.1 ms). These establish behavior and runtime
+compatibility, not an official score. The private replay is a recorded observation
+sequence; it does not simulate the consequences of changed decisions.
 
 ## Strategy
 
