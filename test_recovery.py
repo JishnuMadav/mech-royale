@@ -99,6 +99,45 @@ class RecoveryTests(unittest.TestCase):
                              lands_in=0, capture_s=4, progress=1, holder=obs['self']['id'])]
         self.assertGreater(bot.act(obs)['move'][0], .8)
 
+    def test_opening_faces_a_confirmed_hit_and_ignores_the_crate(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        x,y,z = me['pos']
+        me['weapons'][1] = None
+        me['cubes'] = 0
+        obs.update(t=2,alive=16)
+        obs['events'] = [dict(type='damaged',by=(me['id']+1)%16,bearing=2.5,amount=45)]
+        obs['crates'] = [dict(id=1000,pos=[x+20,y,z],hp=300)]
+        bot.arena.clear_shot = lambda *a: True
+        self.assertAlmostEqual(bot.act(obs)['aim'][0],2.5)
+        self.assertIsNone(bot.target_id)
+        self.assertEqual(bot.phase,'opening')
+
+    def test_endgame_tracks_last_contact_then_expires_it(self):
+        bot, obs = self.scenario()
+        x,y,z = obs['self']['pos']
+        obs.update(alive=6,t=45)
+        obs['mechs'] = [dict(id=8,kind='mech',pos=[x,y+50,z],vel=[0,0,0],hp=800)]
+        bot.act(obs)
+        self.assertEqual(bot.phase,'midgame')
+        obs.update(alive=3,t=46,mechs=[],sounds=[])
+        self.assertAlmostEqual(bot.act(obs)['aim'][0],1.5707963)
+        self.assertEqual(bot.phase,'endgame')
+        obs['t']=49
+        bot.act(obs)
+        self.assertIsNone(bot.guarded_bearing(obs))
+
+    def test_final_four_rotates_before_regular_zone_deadline(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        x,y,_ = me['pos']
+        obs.update(alive=4,t=90)
+        obs['zone'].update(next_center=[x+120,y],next_radius=50)
+        bot.navigator.zone_distance = lambda *args: 70
+        obs['zone']['shrink_end'] = 90+70/me['stats']['walk_speed']+11
+        bot.act(obs)
+        self.assertTrue(bot.zone_urgent)
+
     def test_zone_distance_accounts_for_wall_detour(self):
         class Map:
             bounds = dict(minX=-80, maxX=80, minY=-80, maxY=80)

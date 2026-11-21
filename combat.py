@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-recovery-v26'
+    name = 'Oval-Sentinel-match-plan-v37'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -30,6 +30,41 @@ class Combat:
         self.progress_pos = None
         self.progress_at = 0
         self.zone_urgent = False
+        self.phase = 'opening'
+        self.contacts = {}
+        self.incoming = {}
+
+    def read_fight(self, obs, mechs):
+        now, me = obs['t'], obs['self']
+        if obs['alive'] <= 4 or obs['zone']['next_radius'] <= 30:
+            self.phase = 'endgame'
+        elif now >= 30 or me['cubes'] or sum(bool(w) for w in me['weapons']) >= 2:
+            self.phase = 'midgame'
+        self.contacts = {i: info for i, info in self.contacts.items() if now-info[0] < 2.5}
+        self.incoming = {i: hit for i, hit in self.incoming.items() if now-hit[0] < 2}
+        for enemy in mechs:
+            self.contacts[enemy['id']] = now, enemy['pos'], enemy.get('vel', (0,0,0))
+        for e in obs['events']:
+            if e['type'] == 'damaged' and e.get('by') in range(16) and e['by'] != me['id'] and e.get('bearing') is not None:
+                t, _, previous = self.incoming.get(e['by'], (-100, 0, 0))
+                self.incoming[e['by']] = now, e['bearing'], e.get('amount', 0) + previous*math.exp(t-now)
+
+    def guarded_bearing(self, obs):
+        now = obs['t']
+        if self.incoming:
+            hit = max(self.incoming.values(), key=lambda h: h[2]*math.exp(h[0]-now))
+            return hit[1]
+        if self.phase == 'endgame':
+            pos = obs['self']['pos']
+            if self.contacts:
+                t, p, v = max(self.contacts.values(), key=lambda c: (c[0], -math.dist(pos,c[1])))
+                dt = min(.7, now-t)
+                return math.atan2(p[1]+v[1]*dt-pos[1], p[0]+v[0]*dt-pos[0])
+            sounds = [s for s in obs.get('sounds', ()) if s['dist'] == 'near' and
+                      s['kind'] in ('gun','lightning','laser','laser_charge','mortar')]
+            if sounds:
+                return min(sounds,key=lambda s:s['age'])['bearing']
+        return None
 
     def update_recovery(self, hp):
         # Enter only below 25%; finish a recovery rather than oscillating at 25%.
@@ -119,6 +154,8 @@ class Combat:
         elif me['energy'] < 20:
             self.arc_resting = True
         mechs = [m for m in obs['mechs'] if m['kind'] == 'mech']
+        self.read_fight(obs, mechs)
+        guard = self.guarded_bearing(obs)
         nearest = min((math.dist(pos, m['pos']) for m in mechs), default=1e9)
         close_count = sum(math.dist(pos, m['pos']) < 100 for m in mechs)
         self.update_recovery(hp)
@@ -156,10 +193,23 @@ class Combat:
             distance = math.dist(pos, m['pos'])
             if m['kind'] == 'npc' and (nearest < 90 or distance > 65):
                 continue
+            if m['kind'] == 'npc' and self.phase == 'endgame' and guard is not None:
+                continue
             top = m['pos'][2] + (4.5 * (1 + .05 * m.get('cubes', 0)) if m['kind'] == 'mech' else 1.75)
             if not self.arena.clear_shot(origin, [*m['pos'][:2], top]):
                 continue
             value = distance + m.get('hp', 1400) * .045
+            if guard is not None and self.incoming:
+                yaw = math.atan2(m['pos'][1]-y, m['pos'][0]-x)
+                if m['kind'] != 'mech' or (self.phase == 'opening' and abs(angle_delta(yaw,guard)) > 1.65
+                                           and m.get('hp',1400) > 150 and m['id'] not in self.incoming):
+                    continue
+                value += 32 * (1-math.cos(angle_delta(yaw,guard)))
+            if self.phase != 'opening' and m['kind'] == 'mech':
+                if m['id'] in self.incoming:
+                    value -= 20
+                if m.get('charging') or ('laser' in by_kind and 'mortar' in m.get('weapons', ())):
+                    value -= 15
             if m['kind'] == 'npc':
                 value += 45
             if m['id'] == self.target_id:
@@ -167,7 +217,7 @@ class Combat:
             if m.get('hp', 1400) < 300:
                 value -= 40
             targets.append((value, m))
-        if nearest > 90 and not recovering:
+        if nearest > 90 and not recovering and not self.incoming and not (self.phase == 'endgame' and guard is not None):
             for crate in obs['crates']:
                 distance = math.dist(pos, crate['pos'])
                 if distance < 65 and abs(crate['pos'][2] - z) < 6 and self.arena.clear_shot(origin, [*crate['pos'][:2], crate['pos'][2] + 1]):
@@ -185,11 +235,15 @@ class Combat:
         seeking_loot = False
         to_next = self.navigator.zone_distance(pos, zone, now)
         urgent = not me['in_zone'] or (to_next > 0 and now + to_next / stats['walk_speed'] + 8 >= zone['shrink_end'])
+        if self.phase == 'endgame' and to_next > 0:
+            # With few players left, rotate while the perimeter is still passable.
+            urgent = urgent or now + 2*to_next / stats['walk_speed'] + 12 >= zone['shrink_end']
         self.zone_urgent = urgent
         if urgent or zone['next_radius'] <= 30:
             goal = list(zone['next_center'])
         # Don't abandon an early duel just because a shrinking phase has begun.
-        if not urgent and zone['next_radius'] > 30:
+        active_fight = self.phase != 'opening' and bool(self.incoming) and len(by_kind) >= 2
+        if not urgent and not active_fight and zone['next_radius'] > 30:
             if pickup_candidates and min(pickup_candidates, key=lambda pair: pair[0])[0] < 80 and nearest > 35:
                 goal = min(pickup_candidates, key=lambda pair: pair[0])[1]['pos'][:2]
                 seeking_loot = True
@@ -263,6 +317,8 @@ class Combat:
         elif mechs:
             watch = min(mechs, key=lambda enemy: math.dist(pos, enemy['pos']))
             action['aim'] = [math.atan2(watch['pos'][1] - y, watch['pos'][0] - x), 0]
+        if guard is not None and target is None:
+            action['aim'] = [guard, 0]
 
         if target:
             distance = math.dist(pos, target['pos'])
@@ -322,6 +378,14 @@ class Combat:
         separation = 30 if 'lightning' in kinds and not self.arc_resting else 85 if 'laser' in kinds else 55
         if self.healing:
             separation += 25
+        pressure = []
+        if self.phase != 'opening' and not self.zone_urgent:
+            for enemy in enemies:
+                if enemy['id'] not in self.incoming and not enemy.get('charging'):
+                    continue
+                p = enemy['pos']
+                bearing = enemy.get('aim', [math.atan2(pos[1]-p[1],pos[0]-p[0])])[0]
+                pressure.append((p, math.cos(bearing), math.sin(bearing), enemy.get('charging',False)))
         candidates = []
         for offset in (0, .35, -.35, .7, -.7, 1.2, -1.2, 1.7, -1.7, 2.3, -2.3, math.pi):
             d = (math.cos(yaw + offset), math.sin(yaw + offset))
@@ -331,6 +395,18 @@ class Combat:
             score = math.cos(offset) - max(0, math.dist(future, zone['center']) - max(0, zone['radius'] - 5)) * .3
             velocity = me.get('vel', [0, 0, 0])
             score += .15 * sum(d[i] * velocity[i] for i in range(2)) / stats['walk_speed']
+            for p, ax, ay, charging in pressure:
+                rx, ry = future[0]-p[0], future[1]-p[1]
+                if rx*ax+ry*ay > 0:
+                    miss = abs(rx*ay-ry*ax)
+                    score -= (1.9 if charging else .9) * max(0, 1-miss/10)
+            if self.phase == 'endgame':
+                # Preserve room to fight when strafing next to the closing edge.
+                margin = min(12, zone['next_radius']*.3)
+                safe = max(0,zone['next_radius']-margin)
+                before = max(0,math.dist(pos[:2],zone['next_center'])-safe)
+                after = max(0,math.dist(future,zone['next_center'])-safe)
+                score += .11 * (before-after)
             # Circle travel must not walk straight into a fresh enemy's weapon
             # range. This potential allows a sideways approach to the safe area.
             for enemy in enemies:
