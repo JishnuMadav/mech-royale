@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-laserfix-v8'
+    name = 'Oval-Sentinel-range-v13'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -213,9 +213,9 @@ class Combat:
         if target and target['kind'] == 'mech' and not urgent and not seeking_loot and not seeking_cover and zone['next_radius'] > 20:
             ex, ey = unit(target['pos'][0] - x, target['pos'][1] - y)
             distance = math.dist(pos, target['pos'])
-            preferred = (60 if self.arc_resting else 35) if 'lightning' in by_kind else 90 if 'laser' in by_kind else 60
+            preferred = (60 if self.arc_resting else 35) if 'lightning' in by_kind else 130 if 'laser' in by_kind else 60
             if 'lightning' in target.get('weapons', []) and 'laser' in by_kind:
-                preferred = 110
+                preferred = 145
             if hp < 0.35 or close_count >= 3:
                 preferred += 40
             radial = max(-1.3, min(1.2, (distance - preferred) / 25))
@@ -283,7 +283,7 @@ class Combat:
         kinds = {w['kind'] for w in me['weapons'] if w}
         enemies = sorted((e for e in obs['mechs'] if e['kind'] == 'mech' and e.get('hp', 1400) > 150),
                          key=lambda e: math.dist(pos, e['pos']))[:4]
-        separation = 30 if 'lightning' in kinds and not self.arc_resting else 85 if 'laser' in kinds else 55
+        separation = 30 if 'lightning' in kinds and not self.arc_resting else 105 if 'laser' in kinds else 55
         if self.healing:
             separation += 25
         candidates = []
@@ -333,7 +333,7 @@ class Combat:
             action['jump'] = True
             self.jet_until = now + 4
         nearest = min((math.dist(pos, e['pos']) for e in enemies), default=1e9)
-        danger = not me['in_zone'] or me['hp'] < me['max_hp'] * .55 or ('laser' in kinds and nearest < 65)
+        danger = not me['in_zone'] or me['hp'] < me['max_hp'] * .55 or ('laser' in kinds and nearest < 95)
         if self.boosting:
             self.boosting = danger and me['energy'] > 20
         else:
