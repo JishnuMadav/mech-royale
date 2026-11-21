@@ -238,7 +238,10 @@ class Combat:
             chosen = by_kind.get('gun')
             laser = by_kind.get('laser')
             mortar = by_kind.get('mortar')
-            if laser and laser[1].get('charge', 0) >= laser[1]['stats']['charge']:
+            # Observed charge is rounded to 2 decimals, while upgraded charge
+            # duration is rounded to 3 (.56 versus .563). Without tolerance a
+            # full beam waits for the automatic two-second hold timeout.
+            if laser and laser[1].get('charge', 0) + .01 >= laser[1]['stats']['charge']:
                 chosen = laser
             elif mortar and mortar[1]['cooldown'] <= .05 and distance > 25:
                 chosen = mortar
@@ -259,7 +262,7 @@ class Combat:
                     elif weapon['kind'] == 'mortar':
                         action['fire'][slot] = bool(can_fight and aligned)
                     if laser and distance < laser[1]['stats']['range'] and can_fight:
-                        charged = laser[1].get('charge', 0) >= laser[1]['stats']['charge']
+                        charged = laser[1].get('charge', 0) + .01 >= laser[1]['stats']['charge']
                         action['fire'][laser[0]] = bool(not charged or not (weapon['kind'] == 'laser' and aligned))
                     lightning = by_kind.get('lightning')
                     if lightning:

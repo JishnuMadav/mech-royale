@@ -144,6 +144,18 @@ class BotTests(unittest.TestCase):
                          'lands_in': 0, 'capture_s': 4, 'progress': 1, 'holder': obs['self']['id']}]
         self.assertEqual(bot.act(obs)['move'], [0, 0])
 
+        # A full upgraded beam is reported as .56 seconds against a .563-second
+        # limit. Release along the laser snapshot, not the moving gun intercept.
+        obs['self']['hp'] = obs['self']['max_hp']
+        laser_stats = dict(hello['config']['weapons']['laser'], charge=.563)
+        obs['self']['weapons'][1] = {'kind': 'laser', 'cooldown': 0, 'charge': .56, 'stats': laser_stats}
+        enemy.update(pos=[pos[0] + 80, pos[1], pos[2]], vel=[0, 10, 0])
+        obs['mechs'] = [enemy]
+        obs['self']['aim'] = [0, 0]
+        action = bot.act(obs)
+        self.assertFalse(action['fire'][1])
+        self.assertAlmostEqual(action['aim'][0], 0)
+
 
 if __name__ == '__main__':
     unittest.main()
