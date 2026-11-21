@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-laserfix-v8'
+    name = 'Oval-Sentinel-armor-v12'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -102,7 +102,7 @@ class Combat:
             self.healing = True
         recovering = self.healing and nearest > 55
         if obs['offer']:
-            ranks = {'gun_damage': 88, 'gun_rate': 86, 'gun_mag': 98, 'plating': 100, 'armor': 94,
+            ranks = {'gun_damage': 88, 'gun_rate': 86, 'gun_mag': 122, 'plating': 125, 'armor': 114,
                      'servos': 95, 'nanites': 96 if hp < .55 else 80, 'reactor': 77, 'jets': 70, 'capacitor': 60,
                      'lightning_efficiency': 108, 'lightning_range': 106, 'laser_damage': 115,
                      'laser_charge': 110, 'gun_velocity': 78}
