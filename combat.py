@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-recovery-v26'
+    name = 'Oval-Sentinel-recovery-v32'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -27,6 +27,9 @@ class Combat:
         self.pickup_memory = {}
         self.cube_memory = {}
         self.last_threat = (-100, 0)
+        self.short_source = None
+        self.short_ends = -100
+        self.laser_resume_at = -100
         self.progress_pos = None
         self.progress_at = 0
         self.zone_urgent = False
@@ -102,6 +105,10 @@ class Combat:
         for event in obs['events']:
             if event['type'] == 'damaged' and event.get('bearing') is not None:
                 self.last_threat = (now, event['bearing'])
+            if event['type'] == 'effect' and event['effect'] == 'short':
+                self.short_source = event.get('by')
+                self.short_ends = now + self.config['weapons']['lightning']['short_s']
+                self.laser_resume_at = self.short_ends
         weapons = me['weapons']
         action = {'tick': obs['tick'], 'fire': [False, False], 'boost': False, 'jump': False}
         by_kind = {w['kind']: (i, w) for i, w in enumerate(weapons) if w}
@@ -119,6 +126,13 @@ class Combat:
         elif me['energy'] < 20:
             self.arc_resting = True
         mechs = [m for m in obs['mechs'] if m['kind'] == 'mech']
+        if self.short_source is not None and now <= self.laser_resume_at:
+            # A fresh charge halves walking speed. Allow a short gap to open
+            # after the interrupt before resuming the usual laser cycle.
+            arc_range = self.config['weapons']['lightning']['range']
+            if any(m['id'] == self.short_source and math.dist(pos, m['pos']) < arc_range + 20
+                   for m in mechs):
+                self.laser_resume_at = max(self.laser_resume_at, min(now + 1, self.short_ends + 3))
         nearest = min((math.dist(pos, m['pos']) for m in mechs), default=1e9)
         close_count = sum(math.dist(pos, m['pos']) < 100 for m in mechs)
         self.update_recovery(hp)
@@ -269,12 +283,12 @@ class Combat:
             chosen = by_kind.get('gun')
             laser = by_kind.get('laser')
             mortar = by_kind.get('mortar')
-            escaping_zone = not me['in_zone']
+            delay_charge = not me['in_zone'] or now < self.laser_resume_at
             # Observed charge is rounded to 2 decimals, while upgraded charge
             # duration is rounded to 3 (.56 versus .563). Without tolerance a
             # full beam waits for the automatic two-second hold timeout.
             if laser and (self.laser_should_release(me, target, laser[1]) or
-                          (escaping_zone and laser[1].get('charge', 0) > 0)):
+                          (delay_charge and laser[1].get('charge', 0) > 0)):
                 chosen = laser
             elif mortar and mortar[1]['cooldown'] <= .05 and distance > 25:
                 chosen = mortar
@@ -295,10 +309,8 @@ class Combat:
                     elif weapon['kind'] == 'mortar':
                         action['fire'][slot] = bool(can_fight and aligned)
                     if laser and distance < laser[1]['stats']['range'] and can_fight:
-                        charged = self.laser_should_release(me, target, laser[1]) or escaping_zone
-                        if not escaping_zone or laser[1].get('charge', 0) > 0:
-                            # Outside the zone, discharge along the correct aim
-                            # and do not begin another movement-halving charge.
+                        charged = self.laser_should_release(me, target, laser[1]) or delay_charge
+                        if not delay_charge or laser[1].get('charge', 0) > 0:
                             action['fire'][laser[0]] = bool(not charged or not (weapon['kind'] == 'laser' and aligned))
                     lightning = by_kind.get('lightning')
                     if lightning:

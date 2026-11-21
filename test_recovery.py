@@ -99,6 +99,47 @@ class RecoveryTests(unittest.TestCase):
                              lands_in=0, capture_s=4, progress=1, holder=obs['self']['id'])]
         self.assertGreater(bot.act(obs)['move'][0], .8)
 
+    def test_laser_waits_for_separation_after_a_confirmed_short(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        x, y, z = me['pos']
+        me['weapons'][1] = dict(kind='laser', cooldown=0, charge=0,
+                                stats=self.hello['config']['weapons']['laser'])
+        enemy = dict(id=7, kind='mech', hp=1400, cubes=0, pos=[x+50, y, z],
+                     vel=[0, 0, 0], weapons=['lightning'])
+        obs['mechs'] = [enemy]
+        bot.arena.clear_shot = lambda *args: True
+        obs['t'] = 10
+        self.assertTrue(bot.act(obs)['fire'][1])
+        obs['events'] = [dict(type='effect', effect='short', by=7)]
+        self.assertFalse(bot.act(obs)['fire'][1])
+        obs['events'] = []
+        for now in (11.9, 12.1):
+            obs['t'] = now
+            action = bot.act(obs)
+            self.assertFalse(action['fire'][1])
+        self.assertTrue(action['fire'][0])
+        enemy['pos'][0] = x+80
+        obs['t'] = 12.5
+        self.assertFalse(bot.act(obs)['fire'][1])
+        obs['t'] = 13.2
+        self.assertTrue(bot.act(obs)['fire'][1])
+
+    def test_laser_delay_expires_even_if_short_source_stays_close(self):
+        bot, obs = self.scenario()
+        x, y, z = obs['self']['pos']
+        obs['self']['weapons'][1] = dict(kind='laser', cooldown=0, charge=0,
+                                         stats=self.hello['config']['weapons']['laser'])
+        obs['mechs'] = [dict(id=7, kind='mech', hp=1400, cubes=0,
+                             pos=[x+50,y,z], vel=[0,0,0], weapons=['lightning'])]
+        bot.arena.clear_shot = lambda *args: True
+        for i in range(52):
+            obs['t'] = 10+i/10
+            obs['events'] = [dict(type='effect', effect='short', by=7)] if i==0 else []
+            action = bot.act(obs)
+            if i<50: self.assertFalse(action['fire'][1])
+        self.assertTrue(action['fire'][1])
+
     def test_zone_distance_accounts_for_wall_detour(self):
         class Map:
             bounds = dict(minX=-80, maxX=80, minY=-80, maxY=80)
