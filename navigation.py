@@ -23,6 +23,9 @@ class Navigator:
         self.zone_key = None
         self.zone_after = -1
         self.zone_start = None
+        self.entry_route = []
+        self.entry_key = None
+        self.entry_after = -1
         for iy in range(self.ny):
             for ix in range(self.nx):
                 x, y = self.x0 + ix * 10, self.y0 + iy * 10
@@ -108,6 +111,56 @@ class Navigator:
                 return max(direct, length)
             previous = point
         return max(direct, length + max(0, math.dist(previous[:2], center) - radius))
+
+    def ring_entry(self, pos, zone, enemies, now):
+        """Find a walkable entry anywhere in the next circle, pricing enemy proximity along the route."""
+        center = zone['next_center']
+        radius = max(3, zone['next_radius'] - 10)
+        if math.dist(pos[:2], center) <= radius or pos[2] > self.arena.ground(*pos[:2]) + 4:
+            return None
+        nearby = sorted(enemies, key=lambda e: math.dist(pos, e['pos']))[:3]
+        key = (*center, radius, *(e['id'] for e in nearby))
+        if key != self.entry_key or now >= self.entry_after:
+            self.entry_key, self.entry_after = key, now + 1.5
+            self.entry_route = self.entry_path(pos, center, radius, nearby)
+        if not self.entry_route:
+            return None
+        # Local steering can skip a node while dodging. Resume at the nearest segment.
+        first = min(range(len(self.entry_route)), key=lambda i: math.dist(pos, self.entry_route[i]))
+        if math.dist(pos, self.entry_route[first]) < 6:
+            first = min(first + 1, len(self.entry_route) - 1)
+        self.entry_route = self.entry_route[first:]
+        return self.entry_route[0][:2]
+
+    def entry_path(self, pos, center, radius, enemies):
+        start = self.nearest(pos)
+        if start is None:
+            return []
+        deadline = time.perf_counter() + .004
+        queue = [(0, 0, start)]
+        scores, parents = {start: 0}, {}
+        penalties = {}
+        while queue and time.perf_counter() < deadline:
+            _, cost, cell = heapq.heappop(queue)
+            if cost != scores[cell]:
+                continue
+            if math.dist(self.points[cell][:2], center) <= radius:
+                path = [self.points[cell]]
+                while cell in parents:
+                    cell = parents[cell]
+                    path.append(self.points[cell])
+                return path[::-1]
+            for neighbor, length in self.links[cell]:
+                point = self.points[neighbor]
+                if neighbor not in penalties:
+                    penalties[neighbor] = sum(max(0, 1 - math.dist(point, e['pos']) / 70) ** 2
+                                              for e in enemies)
+                candidate = cost + length * (1 + 2 * penalties[neighbor])
+                if candidate < scores.get(neighbor, math.inf):
+                    scores[neighbor], parents[neighbor] = candidate, cell
+                    remaining = max(0, math.dist(point[:2], center) - radius)
+                    heapq.heappush(queue, (candidate + remaining, candidate, neighbor))
+        return []
 
     def waypoint(self, pos, goal, now):
         # Roofs are handled by local steering; the grid represents ground travel.

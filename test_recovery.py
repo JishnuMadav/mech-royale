@@ -2,6 +2,7 @@
 import copy
 import gzip
 import json
+import math
 from pathlib import Path
 import unittest
 
@@ -112,6 +113,63 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(nav.zone_distance([50, 0, 0], zone, 1), 0)
         nav.path = lambda *args: []
         self.assertGreaterEqual(nav.zone_distance([-50, 0, 0], zone, 3), 92)
+
+    def test_entry_uses_open_side_of_ring_around_wall(self):
+        class Map:
+            bounds = dict(minX=-80, maxX=80, minY=-80, maxY=80)
+            def ground(self, x, y):
+                return 0
+            def solid(self, x, y, low, high):
+                return -5 <= x <= 5 and -25 <= y <= 25
+        nav = Navigator(Map())
+        opponents = [dict(id=1, pos=[0, 32, 0]), dict(id=2, pos=[10, 40, 0])]
+        route = nav.entry_path([-50, 0, 0], [50, 0], 15, opponents)
+        self.assertTrue(route)
+        self.assertLessEqual(math.dist(route[-1][:2], [50, 0]), 15)
+        self.assertTrue(any(y < -25 for _, y, _ in route))
+
+    def test_blind_crossfire_faces_both_sources_across_angle_wrap(self):
+        bot, obs = self.scenario()
+        ids = [i for i in range(16) if i != obs['self']['id']][:2]
+        obs['events'] = [dict(type='damaged', by=i, bearing=b, amount=45)
+                         for i, b in zip(ids, [-2.5, 2.5])]
+        self.assertAlmostEqual(abs(bot.act(obs)['aim'][0]), math.pi)
+
+    def test_joint_fire_and_arc_escape(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        x, y, z = me['pos']
+        bot.arena.clear_shot = lambda *p: True
+        target = dict(id=99, kind='mech', pos=[x+50,y,z], hp=1400, vel=[0,0,0], weapons=['gun'])
+        obs['mechs'] = [target]
+        laser = dict(kind='laser', charge=1, cooldown=0, stats=self.hello['config']['weapons']['laser'])
+        me['weapons'][1] = laser
+        gun = me['weapons'][0]
+        gun.update(ammo=10, cooldown=0, reload=0)
+        me['aim'] = bot.aim_at(me, target, 'laser', laser)[0]
+        self.assertEqual(bot.act(obs)['fire'], [True, False])
+        target['vel'] = [0, 30, 0]
+        self.assertFalse(bot.act(obs)['fire'][0])
+        target.update(vel=[0,0,0], weapons=['gun','lightning'])
+        laser['charge'] = 0
+        action = bot.act(obs)
+        self.assertLess(action['move'][0], -.65)
+        self.assertTrue(action['boost'])
+        self.assertFalse(action['fire'][1])
+
+    def test_impossible_mortar_uses_gun(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        x, y, z = me['pos']
+        bot.arena.clear_shot = lambda *p: True
+        target = dict(id=99, kind='mech', pos=[x+100,y,z], hp=1400, vel=[0,0,0])
+        obs['mechs'] = [target]
+        mortar = dict(self.hello['config']['weapons']['mortar'], speed=10)
+        me['weapons'][1] = dict(kind='mortar', cooldown=0, stats=mortar)
+        gun = me['weapons'][0]
+        gun.update(ammo=10, cooldown=0, reload=0)
+        me['aim'] = bot.aim_at(me, target, 'gun', gun)[0]
+        self.assertEqual(bot.act(obs)['fire'], [True, False])
 
 
 if __name__ == '__main__':
