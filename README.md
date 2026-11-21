@@ -70,6 +70,10 @@ V7 additionally captures nearby uncontested supply drops for full repair and
 power cubes. It uses the supplied landing and capture timing from observations.
 When no target is visible, it faces recent incoming damage instead of exposing
 its rear armor while scanning.
+The laser correction scored **5.73** (BB-DF9C6D15,
+`53c7150303aa26d5733e0c5aa01e1681a36ea10d`) and became the selected entry.
+V9 tests faster early growth with that fix: it seeks the six-cube upgrade, farms isolated
+drones and crates from farther away, and can run to a safe supply drop.
 
 ## Submission
 
