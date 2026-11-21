@@ -5,10 +5,10 @@ Dockerfile runs `combat.py`; there are no third-party runtime dependencies.
 
 ## Verified submission
 
-The selected entry scores **5.81** in official practice (48 matches).
+The selected entry scores **5.85** in official practice (48 matches).
 
-- Receipt: `BB-19EDB71A`
-- Scored commit: `e180da3acf355f2941d7768bb35419d0b104dbd5`
+- Receipt: `BB-7097A598`
+- Scored commit: `2054a5bb27fdd36c8b8f63eebddbcf145737694e`
 - Repository: https://github.com/JishnuMadav/mech-royale
 - Track: https://www.joinbuilders.org/buildathon/tracks/builders
 
@@ -16,7 +16,7 @@ The development target is **strictly greater than 6.31**. It has not yet been
 reached. The site retains the best scored entry while experimental branches
 are evaluated. Private free-for-all games are diagnostics, not practice scores.
 
-## Recovery candidate v26 (unscored)
+## Selected recovery strategy v26 (5.85)
 
 This branch starts from the selected 5.81 runtime, not the 5.48 squad/zone
 experiment. It starts cover recovery strictly below 25% health and finishes
@@ -46,7 +46,8 @@ Validation on 2026-11-22:
 
 The audit covered all 13 locally saved private traces and the 19 recorded official
 results. Official per-match replays are not available in these records, so the
-causes of the 5.48 result remain hypotheses. This revision is not yet submitted.
+causes of the 5.48 result remain hypotheses. Official practice scored this revision
+**5.85** on 2026-11-22, improving the selected score by 0.04. The target remains unmet.
 
 ## Strategy
 
@@ -80,9 +81,9 @@ docker build --platform linux/amd64 -t mech-royale:local .
 python3 mechfight-kit/check/check.py --map-dir /arena -- docker run --rm -i --network none --cpus 1 --memory 512m --memory-swap 512m --pids-limit 128 --cap-drop ALL --read-only --tmpfs /tmp:rw,size=64m --user 65534:65534 -v "$PWD/mechfight-kit/arena:/arena:ro" mech-royale:local
 ```
 
-The selected runtime passed the official checker under these container
-restrictions: **300/300 observations**, no missed deadlines, maximum response
-**8.8 ms** against a 50 ms budget. Regression checks cover geometry, aiming,
+The selected runtime passed two VM checks under these container restrictions:
+**600/600 observations**, no missed deadlines, maximum response **24.8 ms**
+against a 50 ms budget. The local-host replay timing caveat is recorded above. Regression checks cover geometry, aiming,
 laser charge release, navigation, and decision handling. The checker validates
 protocol and timing; it does not simulate matches or establish playing strength.
 
@@ -103,9 +104,15 @@ protocol and timing; it does not simulate matches or establish playing strength.
 | Armor and magazine priorities | 5.71 | BB-6683FFC3 |
 | Wider laser spacing | 5.65 | BB-093E79FF |
 | Terrain-aware loot | 5.67 | BB-0E14E4C3 |
-| Early lethal laser releases | **5.81** | **BB-19EDB71A** |
+| Early lethal laser releases | 5.81 | BB-19EDB71A |
+| Beam warning dodge | 5.65 | BB-A61CC6BF |
+| Projectile physics | 5.31 | BB-3CF94DAD |
+| Weaker-target focus | 5.21 | BB-7F41D080 |
+| Repair upgrades | 5.65 | BB-5D14A8D0 |
+| Earlier squad cover and zone travel | 5.48 | BB-76ECA895 |
+| Critical-health recovery and zone escape | **5.85** | **BB-7097A598** |
 
-Results above were observed on 2026-11-21. Each experimental commit is retained
+Results above were observed on 2026-11-21 and 2026-11-22. Each experimental commit is retained
 on its `codex/` branch; the selected scored commit is immutable.
 Exact commits and receipts are recorded in [results.json](results.json).
 

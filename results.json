@@ -3,10 +3,10 @@
   "target_score": 6.31,
   "comparison": "strictly_greater",
   "selected": {
-    "name": "finisher-v14",
-    "commit": "e180da3acf355f2941d7768bb35419d0b104dbd5",
-    "receipt": "BB-19EDB71A",
-    "score": 5.81
+    "name": "recovery-v26",
+    "commit": "2054a5bb27fdd36c8b8f63eebddbcf145737694e",
+    "receipt": "BB-7097A598",
+    "score": 5.85
   },
   "runs": [
     {
@@ -122,11 +122,17 @@
       "commit": "c1394621617c34b15b590c5ec8ffb3cf2001ae70",
       "receipt": "BB-76ECA895",
       "score": 5.48
+    },
+    {
+      "name": "recovery-v26",
+      "commit": "2054a5bb27fdd36c8b8f63eebddbcf145737694e",
+      "receipt": "BB-7097A598",
+      "score": 5.85
     }
   ],
   "candidate": {
     "name": "recovery-v26",
-    "status": "validated_not_submitted",
+    "status": "scored_selected",
     "unit_tests": 13,
     "vm_checks": [
       {
@@ -155,6 +161,9 @@
       "final_cubes": 5,
       "zone_damage": 0,
       "official_score_estimate": false
-    }
+    },
+    "score": 5.85,
+    "receipt": "BB-7097A598",
+    "commit": "2054a5bb27fdd36c8b8f63eebddbcf145737694e"
   }
 }
