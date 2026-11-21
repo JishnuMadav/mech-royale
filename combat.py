@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-finisher-v14'
+    name = 'Oval-Sentinel-recovery-v26'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -29,6 +29,15 @@ class Combat:
         self.last_threat = (-100, 0)
         self.progress_pos = None
         self.progress_at = 0
+        self.zone_urgent = False
+
+    def update_recovery(self, hp):
+        # Enter only below 25%; finish a recovery rather than oscillating at 25%.
+        if hp >= .60:
+            self.healing = False
+            self.cover_goal = None
+        elif hp < .25:
+            self.healing = True
 
     def aim_at(self, me, target, kind, weapon):
         scale = 1 + 0.05 * target.get('cubes', 0)
@@ -112,11 +121,7 @@ class Combat:
         mechs = [m for m in obs['mechs'] if m['kind'] == 'mech']
         nearest = min((math.dist(pos, m['pos']) for m in mechs), default=1e9)
         close_count = sum(math.dist(pos, m['pos']) < 100 for m in mechs)
-        if hp > .90:
-            self.healing = False
-            self.cover_goal = None
-        elif hp < .60:
-            self.healing = True
+        self.update_recovery(hp)
         recovering = self.healing and nearest > 55
         if obs['offer']:
             ranks = {'gun_damage': 88, 'gun_rate': 86, 'gun_mag': 98, 'plating': 100, 'armor': 94,
@@ -178,8 +183,9 @@ class Combat:
             # place cannot reveal loot on the other side of the building.
             goal = list(zone['next_center'])
         seeking_loot = False
-        to_next = max(0, math.dist(pos[:2], zone['next_center']) - zone['next_radius'] + 12)
+        to_next = self.navigator.zone_distance(pos, zone, now)
         urgent = not me['in_zone'] or (to_next > 0 and now + to_next / stats['walk_speed'] + 8 >= zone['shrink_end'])
+        self.zone_urgent = urgent
         if urgent or zone['next_radius'] <= 30:
             goal = list(zone['next_center'])
         # Don't abandon an early duel just because a shrinking phase has begun.
@@ -197,13 +203,21 @@ class Combat:
                 goal = target['pos'][:2]
 
         if self.healing and mechs and now >= self.cover_after:
-            self.cover_goal = self.navigator.cover(pos, mechs, zone)
+            # Keep useful shelter instead of choosing a different hiding place
+            # every two seconds while regeneration needs five quiet seconds.
+            sheltered = self.cover_goal is not None and math.dist(pos[:2], self.cover_goal[:2]) < 8
+            if sheltered:
+                body = [x, y, z + stats['height'] * .75]
+                sheltered = all(not self.arena.clear_shot([*e['pos'][:2], e['pos'][2] + 7], body)
+                                for e in mechs)
+            if not sheltered:
+                self.cover_goal = self.navigator.cover(pos, mechs, zone)
             self.cover_after = now + 2
         seeking_cover = self.healing and self.cover_goal is not None and not urgent
         if seeking_cover:
             goal = self.cover_goal[:2]
         supply = None
-        if hp < .85 or me['cubes'] < 10:
+        if not urgent and (hp < .85 or me['cubes'] < 10):
             options = []
             for drop in obs['drops']:
                 distance = math.dist(pos, drop['pos'])
@@ -255,10 +269,12 @@ class Combat:
             chosen = by_kind.get('gun')
             laser = by_kind.get('laser')
             mortar = by_kind.get('mortar')
+            escaping_zone = not me['in_zone']
             # Observed charge is rounded to 2 decimals, while upgraded charge
             # duration is rounded to 3 (.56 versus .563). Without tolerance a
             # full beam waits for the automatic two-second hold timeout.
-            if laser and self.laser_should_release(me, target, laser[1]):
+            if laser and (self.laser_should_release(me, target, laser[1]) or
+                          (escaping_zone and laser[1].get('charge', 0) > 0)):
                 chosen = laser
             elif mortar and mortar[1]['cooldown'] <= .05 and distance > 25:
                 chosen = mortar
@@ -279,8 +295,11 @@ class Combat:
                     elif weapon['kind'] == 'mortar':
                         action['fire'][slot] = bool(can_fight and aligned)
                     if laser and distance < laser[1]['stats']['range'] and can_fight:
-                        charged = self.laser_should_release(me, target, laser[1])
-                        action['fire'][laser[0]] = bool(not charged or not (weapon['kind'] == 'laser' and aligned))
+                        charged = self.laser_should_release(me, target, laser[1]) or escaping_zone
+                        if not escaping_zone or laser[1].get('charge', 0) > 0:
+                            # Outside the zone, discharge along the correct aim
+                            # and do not begin another movement-halving charge.
+                            action['fire'][laser[0]] = bool(not charged or not (weapon['kind'] == 'laser' and aligned))
                     lightning = by_kind.get('lightning')
                     if lightning:
                         w = lightning[1]

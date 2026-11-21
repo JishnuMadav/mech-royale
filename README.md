@@ -12,9 +12,41 @@ The selected entry scores **5.81** in official practice (48 matches).
 - Repository: https://github.com/JishnuMadav/mech-royale
 - Track: https://www.joinbuilders.org/buildathon/tracks/builders
 
-The development target is **strictly greater than 6**. It has not yet been
+The development target is **strictly greater than 6.31**. It has not yet been
 reached. The site retains the best scored entry while experimental branches
 are evaluated. Private free-for-all games are diagnostics, not practice scores.
+
+## Recovery candidate v26 (unscored)
+
+This branch starts from the selected 5.81 runtime, not the 5.48 squad/zone
+experiment. It starts cover recovery strictly below 25% health and finishes
+recovery at 60%, retains occupied shelter when enemies cannot see the bot,
+and does not start laser charges outside the zone. An already charged laser
+is aimed and released so charging does not keep halving escape speed.
+
+Zone departure uses obstacle-route distance with the selected runtime's walk
+speed and eight-second margin. Urgent escape takes priority over supply capture.
+The failed experiment's 85% cover trigger and broad sightline movement penalty
+are absent. The selected 90 m laser preference and weapon upgrades are retained.
+
+Validation on 2026-11-22:
+
+- All 13 tests pass: `python -m unittest -v test_bot.py test_recovery.py`.
+- VM restricted Docker: official stream 300/300, maximum 15.2 ms; private replay
+  interval 300/300, maximum 24.8 ms. Both are below the 50 ms response budget.
+- The same replay on the local host had one late response (maximum 72.0 ms),
+  despite passing the checker's allowed tolerance. The VM result above is a
+  separate verification, not a reason to omit that local result.
+- Direct comparisons cover 2,792 recorded observations. On the zone-loss trace,
+  laser-hold commands outside the zone fell from 58 to zero; zone urgency began
+  earlier on 190 observations. This is a decision comparison, not a match simulation.
+- One fresh private FFA game: place 1, two kills, five final cubes, no zone damage.
+  The baseline's separate random game ended in third place. One unpaired game
+  per bot does not establish an improvement in official practice score.
+
+The audit covered all 13 locally saved private traces and the 19 recorded official
+results. Official per-match replays are not available in these records, so the
+causes of the 5.48 result remain hypotheses. This revision is not yet submitted.
 
 ## Strategy
 

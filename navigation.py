@@ -19,6 +19,10 @@ class Navigator:
         self.route = []
         self.route_goal = None
         self.route_after = -1
+        self.zone_route = []
+        self.zone_key = None
+        self.zone_after = -1
+        self.zone_start = None
         for iy in range(self.ny):
             for ix in range(self.nx):
                 x, y = self.x0 + ix * 10, self.y0 + iy * 10
@@ -80,6 +84,30 @@ class Navigator:
                     scores[neighbor], parents[neighbor] = candidate, cell
                     heapq.heappush(queue, (candidate + math.dist(self.points[neighbor][:2], self.points[end][:2]), candidate, neighbor))
         return []
+
+    def zone_distance(self, pos, zone, now):
+        """Estimate travel to safe ground, including a cached obstacle detour."""
+        center = zone['next_center']
+        radius = max(0, zone['next_radius'] - 12)
+        direct = max(0, math.dist(pos[:2], center) - radius)
+        if direct == 0:
+            return 0
+        key = (*center, radius)
+        if (key != self.zone_key or now >= self.zone_after or
+                self.zone_start is None or math.dist(pos, self.zone_start) > 20):
+            self.zone_route = self.path(pos, center)
+            self.zone_key, self.zone_after = key, now + 2
+            self.zone_start = list(pos)
+        if not self.zone_route:
+            return direct * 1.25  # Bounded search failure is uncertainty, not zero distance.
+        first = min(range(len(self.zone_route)), key=lambda i: math.dist(pos, self.zone_route[i]))
+        previous, length = pos, 0
+        for point in self.zone_route[first:]:
+            length += math.dist(previous, point)
+            if math.dist(point[:2], center) <= radius:
+                return max(direct, length)
+            previous = point
+        return max(direct, length + max(0, math.dist(previous[:2], center) - radius))
 
     def waypoint(self, pos, goal, now):
         # Roofs are handled by local steering; the grid represents ground travel.

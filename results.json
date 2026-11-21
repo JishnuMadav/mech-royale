@@ -1,6 +1,6 @@
 {
-  "date": "2026-11-21",
-  "target_score": 6,
+  "date": "2026-11-22",
+  "target_score": 6.31,
   "comparison": "strictly_greater",
   "selected": {
     "name": "finisher-v14",
@@ -92,6 +92,69 @@
       "commit": "e180da3acf355f2941d7768bb35419d0b104dbd5",
       "receipt": "BB-19EDB71A",
       "score": 5.81
+    },
+    {
+      "name": "beam-dodge-v18",
+      "commit": "a7b73a51e99bb6cfb6d9dae18f960d04165a1d1f",
+      "receipt": "BB-A61CC6BF",
+      "score": 5.65
+    },
+    {
+      "name": "physics-v17",
+      "commit": "71ec92b8632363e4e1fc52e20bec6b4fa61169af",
+      "receipt": "BB-3CF94DAD",
+      "score": 5.31
+    },
+    {
+      "name": "focus-v20",
+      "commit": "07a9d1c3fbb513d421f2e66e23af51199f75bb4c",
+      "receipt": "BB-7F41D080",
+      "score": 5.21
+    },
+    {
+      "name": "repair-v21",
+      "commit": "7a89f26e49bbe712100a9b77de64117d52d205e3",
+      "receipt": "BB-5D14A8D0",
+      "score": 5.65
+    },
+    {
+      "name": "squad-zone-v25",
+      "commit": "c1394621617c34b15b590c5ec8ffb3cf2001ae70",
+      "receipt": "BB-76ECA895",
+      "score": 5.48
     }
-  ]
+  ],
+  "candidate": {
+    "name": "recovery-v26",
+    "status": "validated_not_submitted",
+    "unit_tests": 13,
+    "vm_checks": [
+      {
+        "stream": "official kit",
+        "observations": 300,
+        "missed": 0,
+        "max_ms": 15.2
+      },
+      {
+        "stream": "private replay interval",
+        "observations": 300,
+        "missed": 0,
+        "max_ms": 24.8
+      }
+    ],
+    "local_replay_check": {
+      "observations": 300,
+      "missed": 1,
+      "max_ms": 72.0
+    },
+    "direct_comparison_observations": 2792,
+    "private_ffa": {
+      "games": 1,
+      "place": 1,
+      "kills": 2,
+      "final_cubes": 5,
+      "zone_damage": 0,
+      "official_score_estimate": false
+    }
+  }
 }
