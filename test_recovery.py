@@ -99,6 +99,42 @@ class RecoveryTests(unittest.TestCase):
                              lands_in=0, capture_s=4, progress=1, holder=obs['self']['id'])]
         self.assertGreater(bot.act(obs)['move'][0], .8)
 
+    def test_escape_after_lightning_hit_preserves_energy(self):
+        bot, obs = self.scenario()
+        obs['self'].update(grounded=True, energy=90)
+        obs['events'] = [dict(type='damaged', amount=60, weapon='lightning', bearing=0)]
+        bot.arena.solid = lambda *args: False
+        action = bot.act(obs)
+        self.assertTrue(action['jump'] and action['boost'])
+        self.assertLess(action['move'][0], 0)
+        obs['events'] = []
+        obs['self'].update(grounded=False, energy=24)
+        obs['t'] += .1
+        self.assertFalse(bot.act(obs)['boost'])
+
+    def test_only_launch_at_persistent_zone_block_with_headroom(self):
+        bot, obs = self.scenario()
+        bot.zone_urgent = True
+        obs['self'].update(grounded=True, energy=90)
+        bot.arena.clear_move = lambda *args: False
+        self.assertFalse(bot.escape_jet(obs, (1, 0), False))
+        obs['t'] += 1
+        bot.arena.solid = lambda *args: True
+        self.assertFalse(bot.escape_jet(obs, (1, 0), False))
+        bot.arena.solid = lambda *args: False
+        self.assertTrue(bot.escape_jet(obs, (1, 0), False))
+        self.assertFalse(bot.escape_jet(obs, (1, 0), False))
+
+    def test_retreat_on_repeated_burst_damage(self):
+        bot, obs = self.scenario()
+        obs['self']['hp'] = .4 * obs['self']['max_hp']
+        obs['events'] = [dict(type='damaged', amount=.1*obs['self']['max_hp'], weapon='gun', bearing=0)]
+        bot.act(obs)
+        self.assertFalse(bot.healing)
+        obs['t'] += .5
+        bot.act(obs)
+        self.assertTrue(bot.healing)
+
     def test_zone_distance_accounts_for_wall_detour(self):
         class Map:
             bounds = dict(minX=-80, maxX=80, minY=-80, maxY=80)
