@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-supply-v7'
+    name = 'Oval-Sentinel-laserfix-v8'
 
     def __init__(self, hello):
         self.config = hello['config']
