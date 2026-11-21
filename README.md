@@ -1,93 +1,86 @@
 # Mech Royale — Oval Sentinel
 
-Python bot for the 2026 Builders Buildathon Mech Royale track.
-No third-party runtime dependencies. The root Dockerfile is the submission entrypoint.
+Python entry for the 2026 Builders Buildathon Mech Royale track. The root
+Dockerfile runs `combat.py`; there are no third-party runtime dependencies.
 
-This branch tests `combat.py`, a combat and cover candidate built on the original
-bot's geometry helpers and the rooftop candidate's indexed terrain model. It
-prioritizes a laser early, selects weapon-specific aim, manages laser release
-and mortar trajectories, strafes during fights, protects reloads, and lets
-lightning recharge between bursts. It holds territory until zone travel is
-necessary instead of automatically moving toward a crowded center. A bounded
-ground-route planner steers around buildings, and wounded mechs seek reachable
-cover while continuing to defend themselves until they break line of sight.
-`survivor.py` remains available for comparison but is not the entrypoint here.
-The initial baseline remains at commit `d4b7934b5ccbc02b6f29859bb9db385f0829ec4e`.
+## Verified submission
+
+The selected entry scores **5.73** in official practice (48 matches).
+
+- Receipt: `BB-DF9C6D15`
+- Scored commit: `53c7150303aa26d5733e0c5aa01e1681a36ea10d`
+- Repository: https://github.com/JishnuMadav/mech-royale
+- Track: https://www.joinbuilders.org/buildathon/tracks/builders
+
+The development target is **strictly greater than 6**. It has not yet been
+reached. The site retains the best scored entry while experimental branches
+are evaluated. Private free-for-all games are diagnostics, not practice scores.
 
 ## Strategy
 
-- Move toward the next safe circle with a travel-time margin.
-- Strafe and maintain distance from opponents, retreating at low health.
-- Avoid building prisms, map boundaries, and shots into building cover.
-- Lead moving targets and fire only when the actual torso aim is aligned.
-- Collect nearby cubes and a second weapon; favor lasers and sustain upgrades.
-- Manage reloads and energy reserves; jump/jet when stuck.
+- Acquire a second weapon early, favoring lasers, and collect nearby power cubes.
+- Aim the gun with projectile lead, release laser beams at full charge, and use
+  ballistic trajectories for mortar shots.
+- Maintain weapon-appropriate distance and face incoming fire to protect rear armor.
+- Seek reachable cover when wounded; collect uncontested supply drops for repair.
+- Plan ground routes around buildings and leave a travel-time margin for the zone.
+- Manage ammunition and energy, and use jets to escape corners when progress stalls.
 
-This is an experimental heuristic entry. Navigation combines a ground grid with
-local collision checks; rooftops still use local steering.
-The starter recording cannot measure placement or validate movement in a live game.
-Only scored practice matches establish playing strength.
+The laser release logic tolerates the observation's two-decimal charge rounding:
+a reported charge of `0.56` can represent the full upgraded duration `0.563`.
+Without this tolerance, the beam can remain held until its automatic timeout.
+
+`bot.py` provides geometry helpers; `survivor.py` provides indexed terrain;
+`navigation.py` provides bounded ground routing and cover search. Their earlier
+standalone strategies remain available for comparison. `combat.py` is the
+submission entrypoint.
 
 ## Validation
 
-From this directory (Python 3.12+):
+Run from this directory with Python 3.12+ and Docker:
 
 ```sh
 python3 setup_kit.py
 python3 -m unittest -v test_bot.py
-python3 mechfight-kit/check/check.py -- python3 -u bot.py
-python3 mechfight-kit/check/check.py -- python3 -u survivor.py
-python3 mechfight-kit/check/check.py -- python3 -u combat.py
-docker build --platform linux/amd64 -t mech-royale:initial .
-python3 mechfight-kit/check/check.py --map-dir /arena -- docker run --rm -i --network none --cpus 1 --memory 512m --memory-swap 512m --pids-limit 128 --cap-drop ALL --read-only --tmpfs /tmp:rw,size=64m --user 65534:65534 -v "$PWD/mechfight-kit/arena:/arena:ro" mech-royale:initial
+docker build --platform linux/amd64 -t mech-royale:local .
+python3 mechfight-kit/check/check.py --map-dir /arena -- docker run --rm -i --network none --cpus 1 --memory 512m --memory-swap 512m --pids-limit 128 --cap-drop ALL --read-only --tmpfs /tmp:rw,size=64m --user 65534:65534 -v "$PWD/mechfight-kit/arena:/arena:ro" mech-royale:local
 ```
 
-The official checker validates 300 recorded observations, timing, queue handling,
-schema compliance, and shutdown. It is not a simulator.
+The selected runtime passed the official checker under these container
+restrictions: **300/300 observations**, no missed deadlines, maximum response
+**11.5 ms** against a 50 ms budget. Regression checks cover geometry, aiming,
+laser charge release, navigation, and decision handling. The checker validates
+protocol and timing; it does not simulate matches or establish playing strength.
 
-Validated on 2026-11-21: all three regression checks passed; the official checker
-passed on Windows Python, local WSL Docker, and the Ubuntu VM Docker container.
-The VM answered all 300 observations within 50 ms (median 6.3 ms, p99 13.9 ms,
-maximum 17.5 ms), with no bad messages or stale responses. Its practice score
-was 1.29 (receipt BB-C2349777).
-The rooftop candidate also passed restricted WSL Docker validation: 300/300
-within budget, median 2.5 ms, p99 7.4 ms, maximum 11.2 ms. These are protocol
-measurements, not evidence of better placement; its practice score was 0.44
-(receipt BB-D8559723), so it did not replace the baseline as the selected entry.
-The combat-v3 candidate scored 3.67 (receipt BB-9D2EC473, commit
-`5dbeec64befaf446c7f43aa76fc9fa1a31630319`) and became the best entry. Sustain-v4
-also scored 3.67 (receipt BB-AA2FFC04, commit
-`cd85a4b0bed134e019b07006e089bf3261a55ac9`); the earlier v3 remains selected.
-V6 scored 5.10 (BB-B3606475, `3efe92acc5bc15778bcf94ee8ad5a78ffca52972`).
-V7 scored **5.46** (BB-D98A5863, `dd71d123ec8b9754d4570b2c3e8849d14359a068`)
-and is the current selected entry. The target is strictly greater than 6.
-V8 tests the laser charge rounding fix against that 5.46 version: the observed
-charge can be .56 while the full-charge threshold is .563. A .01 tolerance
-prevents a full beam from waiting for its automatic two-second hold timeout.
-V6 adds enemy spacing during zone travel, earlier boost
-use near attackers, and exploration when a spawn offers no visible equipment.
-V7 additionally captures nearby uncontested supply drops for full repair and
-power cubes. It uses the supplied landing and capture timing from observations.
-When no target is visible, it faces recent incoming damage instead of exposing
-its rear armor while scanning.
+## Scored experiments
 
-## Submission
+| Variant | Score | Receipt |
+| --- | ---: | --- |
+| Baseline | 1.29 | BB-C2349777 |
+| Rooftop movement | 0.44 | BB-D8559723 |
+| Combat | 3.67 | BB-9D2EC473 |
+| Sustain | 3.67 | BB-AA2FFC04 |
+| Skirmish and loot | 5.10 | BB-B3606475 |
+| Supply capture and escape | 5.46 | BB-D98A5863 |
+| Laser charge rounding fix | **5.73** | **BB-DF9C6D15** |
+| More aggressive growth | 5.67 | BB-AA121873 |
+| Faster evasion | 5.17 | BB-5D04F286 |
+| Laser retreat from lightning | 5.71 | BB-444A6149 |
 
-Publish this directory as a public GitHub repository, retaining the Dockerfile
-at the repository root. Submit the repository URL on the official track page:
-https://www.joinbuilders.org/buildathon/tracks/builders
+Results above were observed on 2026-11-21. Each experimental commit is retained
+on its `codex/` branch; the selected scored commit is immutable.
 
-The submitted commit must stay under 20 MB. The track allows four submissions
-per hour. Keep the repository public until results are published.
+## Submission and attribution
 
-## Attribution
+Submit the public repository URL with an explicit 40-character commit on the
+track page. Keep the Dockerfile at the root, the submitted tree below 20 MB,
+and the repository public until results are published. Practice allows four
+submissions per rolling hour.
 
-`mechfight.py` comes from the organizer-provided Mech Royale starter kit.
-`setup_kit.py` downloads the exact kit used for validation into an ignored local
-directory; the submission does not need the kit because the scorer mounts its map.
-The kit was downloaded on 2026-11-21 and includes the original
-example bots, protocol, schema, test recording, and arena. Our bot implementation
-is in `bot.py`, `survivor.py`, `combat.py`, and `navigation.py`. No other
-pre-existing bot code or external runtime libraries are used.
+`mechfight.py` is the organizer-provided Python protocol wrapper. `setup_kit.py`
+downloads the pinned official kit into an ignored directory for local checks;
+the scorer supplies the map at runtime. The implementation uses the documented
+observations and public starter kit, with no external runtime libraries.
 
-Project code is released under the MIT License as required by the Buildathon.
+Project code is released under the MIT License.
+
