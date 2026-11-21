@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-cover-v5'
+    name = 'Oval-Sentinel-skirmish-v6'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -85,7 +85,7 @@ class Combat:
             self.healing = True
         recovering = self.healing and nearest > 55
         if obs['offer']:
-            ranks = {'gun_damage': 88, 'gun_rate': 86, 'gun_mag': 85, 'plating': 100, 'armor': 94,
+            ranks = {'gun_damage': 88, 'gun_rate': 86, 'gun_mag': 98, 'plating': 100, 'armor': 94,
                      'servos': 95, 'nanites': 96 if hp < .55 else 80, 'reactor': 77, 'jets': 70, 'capacitor': 60,
                      'lightning_efficiency': 108, 'lightning_range': 106, 'laser_damage': 115,
                      'laser_charge': 110, 'gun_velocity': 78}
@@ -139,6 +139,10 @@ class Combat:
         # Hold favorable territory instead of automatically walking into the
         # coordinated squad. Move to the next circle when its edge will catch us.
         goal = list(pos[:2])
+        if not self.healing and nearest > 80 and (len(by_kind) < 2 or (now < 45 and me['cubes'] < 3)):
+            # An empty-handed spawn behind cover needs exploration; scanning in
+            # place cannot reveal loot on the other side of the building.
+            goal = list(zone['next_center'])
         seeking_weapon = False
         to_next = max(0, math.dist(pos[:2], zone['next_center']) - zone['next_radius'] + 12)
         urgent = not me['in_zone'] or (to_next > 0 and now + to_next / stats['walk_speed'] + 8 >= zone['shrink_end'])
@@ -190,7 +194,7 @@ class Combat:
             mortar = by_kind.get('mortar')
             if laser and laser[1].get('charge', 0) >= laser[1]['stats']['charge']:
                 chosen = laser
-            elif mortar and mortar[1]['cooldown'] <= .05 and distance > 25 and (not chosen or chosen[1].get('reload', 0) > .2):
+            elif mortar and mortar[1]['cooldown'] <= .05 and distance > 25:
                 chosen = mortar
             elif not chosen:
                 chosen = next(iter(by_kind.values()), None)
@@ -227,6 +231,12 @@ class Combat:
         me, zone, now = obs['self'], obs['zone'], obs['t']
         pos, stats = me['pos'], me['stats']
         yaw = math.atan2(direction[1], direction[0])
+        kinds = {w['kind'] for w in me['weapons'] if w}
+        enemies = sorted((e for e in obs['mechs'] if e['kind'] == 'mech' and e.get('hp', 1400) > 150),
+                         key=lambda e: math.dist(pos, e['pos']))[:4]
+        separation = 30 if 'lightning' in kinds and not self.arc_resting else 85 if 'laser' in kinds else 55
+        if self.healing:
+            separation += 25
         candidates = []
         for offset in (0, .35, -.35, .7, -.7, 1.2, -1.2, 1.7, -1.7, 2.3, -2.3, math.pi):
             d = (math.cos(yaw + offset), math.sin(yaw + offset))
@@ -236,6 +246,11 @@ class Combat:
             score = math.cos(offset) - max(0, math.dist(future, zone['center']) - max(0, zone['radius'] - 5)) * .3
             velocity = me.get('vel', [0, 0, 0])
             score += .15 * sum(d[i] * velocity[i] for i in range(2)) / stats['walk_speed']
+            # Circle travel must not walk straight into a fresh enemy's weapon
+            # range. This potential allows a sideways approach to the safe area.
+            for enemy in enemies:
+                distance = math.dist(future, enemy['pos'][:2])
+                score -= 8 * max(0, 1 - distance / separation) ** 2
             for projectile in obs['projectiles'][:30]:
                 rel = [projectile['pos'][i] - pos[i] for i in range(2)]
                 velocity = [projectile['vel'][i] - d[i] * stats['walk_speed'] for i in range(2)]
@@ -258,7 +273,8 @@ class Combat:
         if (self.stuck > 10 or not candidates) and me['grounded'] and me['energy'] > 60:
             action['jump'] = True
             self.jet_until = now + 4
-        danger = not me['in_zone'] or me['hp'] < me['max_hp'] * .35
+        nearest = min((math.dist(pos, e['pos']) for e in enemies), default=1e9)
+        danger = not me['in_zone'] or me['hp'] < me['max_hp'] * .55 or ('laser' in kinds and nearest < 65)
         if self.boosting:
             self.boosting = danger and me['energy'] > 20
         else:

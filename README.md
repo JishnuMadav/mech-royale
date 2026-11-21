@@ -58,7 +58,9 @@ The combat-v3 candidate scored 3.67 (receipt BB-9D2EC473, commit
 `5dbeec64befaf446c7f43aa76fc9fa1a31630319`) and became the best entry. Sustain-v4
 also scored 3.67 (receipt BB-AA2FFC04, commit
 `cd85a4b0bed134e019b07006e089bf3261a55ac9`); the earlier v3 remains selected.
-The v5 cover changes are experimental until scored practice is complete.
+The v5 cover changes and v6 skirmish changes are experimental until scored
+practice is complete. V6 adds enemy spacing during zone travel, earlier boost
+use near attackers, and exploration when a spawn offers no visible equipment.
 
 ## Submission
 
