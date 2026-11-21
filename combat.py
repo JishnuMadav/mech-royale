@@ -17,7 +17,7 @@ def movement_displacement(velocity, desired, acceleration, elapsed):
 
 
 class Combat:
-    name = 'Oval-Sentinel-beam-dodge-v18'
+    name = 'Oval-Sentinel-beam-physics-v19'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -359,11 +359,13 @@ class Combat:
                         score -= max(0, stats['radius'] + 1 - gap)
             for projectile in obs['projectiles'][:30]:
                 rel = [projectile['pos'][i] - pos[i] for i in range(2)]
-                velocity = [projectile['vel'][i] - d[i] * stats['walk_speed'] for i in range(2)]
-                speed2 = sum(v*v for v in velocity)
-                t = -sum(rel[i]*velocity[i] for i in range(2)) / max(1, speed2)
+                desired = [d[i] * speed for i in range(2)]
+                relative_velocity = [projectile['vel'][i] - desired[i] for i in range(2)]
+                speed2 = sum(v*v for v in relative_velocity)
+                t = -sum(rel[i]*relative_velocity[i] for i in range(2)) / max(1, speed2)
                 if 0 < t < .6:
-                    gap = math.hypot(*(rel[i] + velocity[i]*t for i in range(2)))
+                    displacement = movement_displacement(me['vel'], desired, acceleration, t)
+                    gap = math.hypot(*(rel[i] + projectile['vel'][i]*t - displacement[i] for i in range(2)))
                     pz = projectile['pos'][2] + projectile['vel'][2]*t
                     if gap < stats['radius'] + 2 and pos[2] <= pz <= pos[2] + stats['height']:
                         score -= (stats['radius'] + 2 - gap) * .35
