@@ -296,7 +296,7 @@ class Combat:
         separation = 30 if 'lightning' in kinds and not self.arc_resting else 85 if 'laser' in kinds else 55
         if self.healing:
             separation += 25
-        speed = stats['boost_speed'] if self.boosting else stats['walk_speed']
+        speed = stats['boost_speed'] if self.boosting and me['grounded'] else stats['walk_speed']
         if any(w and w['kind'] == 'laser' and w.get('charge', 0) > 0 for w in me['weapons']):
             speed *= stats.get('charge_move_mult', .5)
         acceleration = stats['ground_accel'] if me['grounded'] else stats['air_accel']
