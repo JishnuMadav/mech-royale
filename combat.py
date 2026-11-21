@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-laserfix-v8'
+    name = 'Oval-Sentinel-terrain-loot-v15'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -29,6 +29,12 @@ class Combat:
         self.last_threat = (-100, 0)
         self.progress_pos = None
         self.progress_at = 0
+
+    def accessible_loot(self, pos, item_pos):
+        # Distant ground can be higher or lower than our current ground. The
+        # four-metre vertical pickup limit applies only when we reach the item.
+        return (abs(item_pos[2] - pos[2]) <= 4
+                or abs(item_pos[2] - self.arena.ground(*item_pos[:2])) <= 2)
 
     def aim_at(self, me, target, kind, weapon):
         scale = 1 + 0.05 * target.get('cubes', 0)
@@ -87,7 +93,7 @@ class Combat:
                 if now - last_seen > 12 or (item_id not in seen and math.dist(pos, item['pos']) < 5):
                     del memory[item_id]
         known_pickups = [item for _, item in self.pickup_memory.values()]
-        known_cubes = [item for _, item in self.cube_memory.values()]
+        known_cubes = [item for _, item in self.cube_memory.values() if self.accessible_loot(pos, item['pos'])]
         if self.arc_resting:
             self.arc_resting = me['energy'] < min(65, me['max_energy'] * .65)
         elif me['energy'] < 20:
@@ -112,7 +118,7 @@ class Combat:
         # accept any weapon; later replacements are based on the actual matchup.
         pickup_candidates = []
         for p in known_pickups:
-            if p['kind'] in by_kind or abs(p['pos'][2] - z) > 4:
+            if p['kind'] in by_kind or not self.accessible_loot(pos, p['pos']):
                 continue
             distance = math.dist(pos, p['pos'])
             wanted = any(w is None for w in weapons)
@@ -173,7 +179,7 @@ class Combat:
             elif known_cubes and nearest > 40 and me['cubes'] < 10:
                 cube = min(known_cubes, key=lambda c: math.dist(pos, c['pos']))
                 collect_range = 140 if nearest > 80 else 80
-                if math.dist(pos, cube['pos']) < collect_range and abs(cube['pos'][2] - z) < 4:
+                if math.dist(pos, cube['pos']) < collect_range:
                     goal = cube['pos'][:2]
                     seeking_loot = True
             elif target and target['kind'] != 'mech':

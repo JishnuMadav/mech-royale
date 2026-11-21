@@ -15,6 +15,17 @@ ROOT = Path(__file__).resolve().parent
 
 
 class BotTests(unittest.TestCase):
+    def test_ground_loot_on_different_elevation(self):
+        class Map:
+            def ground(self, x, y):
+                return 8 if x > 50 else 0
+        bot = Combat.__new__(Combat)
+        bot.arena = Map()
+        self.assertTrue(bot.accessible_loot([0, 0, 0], [100, 0, 8]))
+        self.assertTrue(bot.accessible_loot([100, 0, 8], [0, 0, 0]))
+        self.assertFalse(bot.accessible_loot([0, 0, 0], [20, 0, 20]))
+        self.assertTrue(bot.accessible_loot([10, 0, 20], [20, 0, 20]))
+
     def test_can_approach_loot_before_wall(self):
         class Map:
             bounds = {'minX': -60, 'maxX': 60, 'minY': -60, 'maxY': 60}
@@ -155,6 +166,23 @@ class BotTests(unittest.TestCase):
         action = bot.act(obs)
         self.assertFalse(action['fire'][1])
         self.assertAlmostEqual(action['aim'][0], 0)
+
+        # An inaccessible nearest rooftop cube must not hide a farther ground
+        # cube. Choose a travel goal from reachable loot before taking min().
+        obs['mechs'], obs['pickups'], obs['crates'], obs['drops'] = [], [], [], []
+        bot.cube_memory.clear()
+        bot.pickup_memory.clear()
+        obs['self']['cubes'] = 0
+        obs['zone']['shrink_end'] = obs['t'] + 200
+        obs['cubes'] = [
+            {'id': 5100, 'pos': [pos[0] + 10, pos[1], pos[2] + 20]},
+            {'id': 5101, 'pos': [pos[0] + 30, pos[1], pos[2]]},
+        ]
+        bot.arena.ground = lambda x, y: pos[2]
+        goals = []
+        bot.navigator.waypoint = lambda p, g, now: goals.append(g) or g
+        bot.act(obs)
+        self.assertEqual(goals[-1], obs['cubes'][1]['pos'][:2])
 
 
 if __name__ == '__main__':
