@@ -24,6 +24,8 @@ class Combat:
         self.cover_goal = None
         self.cover_after = -1
         self.healing = False
+        self.pickup_memory = {}
+        self.cube_memory = {}
 
     def aim_at(self, me, target, kind, weapon):
         scale = 1 + 0.05 * target.get('cubes', 0)
@@ -71,6 +73,15 @@ class Combat:
         weapons = me['weapons']
         action = {'tick': obs['tick'], 'fire': [False, False], 'boost': False, 'jump': False}
         by_kind = {w['kind']: (i, w) for i, w in enumerate(weapons) if w}
+        for key, memory in (('pickups', self.pickup_memory), ('cubes', self.cube_memory)):
+            seen = {item['id'] for item in obs[key]}
+            for item in obs[key]:
+                memory[item['id']] = (now, item)
+            for item_id, (last_seen, item) in list(memory.items()):
+                if now - last_seen > 12 or (item_id not in seen and math.dist(pos, item['pos']) < 5):
+                    del memory[item_id]
+        known_pickups = [item for _, item in self.pickup_memory.values()]
+        known_cubes = [item for _, item in self.cube_memory.values()]
         if self.arc_resting:
             self.arc_resting = me['energy'] < min(65, me['max_energy'] * .65)
         elif me['energy'] < 20:
@@ -94,7 +105,7 @@ class Combat:
         # Early second-weapon acquisition is worth a short detour. Empty slots
         # accept any weapon; later replacements are based on the actual matchup.
         pickup_candidates = []
-        for p in obs['pickups']:
+        for p in known_pickups:
             if p['kind'] in by_kind or abs(p['pos'][2] - z) > 4:
                 continue
             distance = math.dist(pos, p['pos'])
@@ -143,7 +154,7 @@ class Combat:
             # An empty-handed spawn behind cover needs exploration; scanning in
             # place cannot reveal loot on the other side of the building.
             goal = list(zone['next_center'])
-        seeking_weapon = False
+        seeking_loot = False
         to_next = max(0, math.dist(pos[:2], zone['next_center']) - zone['next_radius'] + 12)
         urgent = not me['in_zone'] or (to_next > 0 and now + to_next / stats['walk_speed'] + 8 >= zone['shrink_end'])
         if urgent or zone['next_radius'] <= 30:
@@ -152,11 +163,13 @@ class Combat:
         if not urgent and zone['next_radius'] > 30:
             if pickup_candidates and min(pickup_candidates, key=lambda pair: pair[0])[0] < 80 and nearest > 35:
                 goal = min(pickup_candidates, key=lambda pair: pair[0])[1]['pos'][:2]
-                seeking_weapon = True
-            elif obs['cubes'] and nearest > 40:
-                cube = min(obs['cubes'], key=lambda c: math.dist(pos, c['pos']))
-                if math.dist(pos, cube['pos']) < 60 and abs(cube['pos'][2] - z) < 4:
+                seeking_loot = True
+            elif known_cubes and nearest > 40 and me['cubes'] < 10:
+                cube = min(known_cubes, key=lambda c: math.dist(pos, c['pos']))
+                collect_range = 140 if nearest > 80 else 80
+                if math.dist(pos, cube['pos']) < collect_range and abs(cube['pos'][2] - z) < 4:
                     goal = cube['pos'][:2]
+                    seeking_loot = True
             elif target and target['kind'] != 'mech':
                 goal = target['pos'][:2]
 
@@ -171,7 +184,7 @@ class Combat:
             travel_goal = self.navigator.waypoint(pos, goal, now)
 
         direction = unit(travel_goal[0] - x, travel_goal[1] - y)
-        if target and target['kind'] == 'mech' and not urgent and not seeking_weapon and not seeking_cover and zone['next_radius'] > 20:
+        if target and target['kind'] == 'mech' and not urgent and not seeking_loot and not seeking_cover and zone['next_radius'] > 20:
             ex, ey = unit(target['pos'][0] - x, target['pos'][1] - y)
             distance = math.dist(pos, target['pos'])
             preferred = (60 if self.arc_resting else 35) if 'lightning' in by_kind else 90 if 'laser' in by_kind else 60
