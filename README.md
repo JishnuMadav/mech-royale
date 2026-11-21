@@ -3,10 +3,12 @@
 Python bot for the 2026 Builders Buildathon Mech Royale track.
 No third-party runtime dependencies. The root Dockerfile is the submission entrypoint.
 
-This branch tests `combat.py`, a combat and loot candidate built on the original
+This branch tests `combat.py`, a combat and sustain candidate built on the original
 bot's geometry helpers and the rooftop candidate's indexed terrain model. It
-acquires a second weapon early, selects weapon-specific aim, manages laser
-release and mortar trajectories, strafes during fights, and protects reloads.
+prioritizes a laser early, selects weapon-specific aim, manages laser release
+and mortar trajectories, strafes during fights, protects reloads, and lets
+lightning recharge between bursts. It holds territory until zone travel is
+necessary instead of automatically moving toward a crowded center.
 `survivor.py` remains available for comparison but is not the entrypoint here.
 The initial baseline remains at commit `d4b7934b5ccbc02b6f29859bb9db385f0829ec4e`.
 
@@ -50,6 +52,9 @@ The rooftop candidate also passed restricted WSL Docker validation: 300/300
 within budget, median 2.5 ms, p99 7.4 ms, maximum 11.2 ms. These are protocol
 measurements, not evidence of better placement; its practice score was 0.44
 (receipt BB-D8559723), so it did not replace the baseline as the selected entry.
+The combat-v3 candidate scored 3.67 (receipt BB-9D2EC473, commit
+`5dbeec64befaf446c7f43aa76fc9fa1a31630319`) and became the best entry. The v4
+changes are experimental until their scored practice run is complete.
 
 ## Submission
 

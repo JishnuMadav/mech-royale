@@ -7,7 +7,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-combat-v3'
+    name = 'Oval-Sentinel-sustain-v4'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -18,6 +18,7 @@ class Combat:
         self.jet_until = -1
         self.boosting = False
         self.target_id = None
+        self.arc_resting = False
 
     def aim_at(self, me, target, kind, weapon):
         scale = 1 + 0.05 * target.get('cubes', 0)
@@ -65,15 +66,19 @@ class Combat:
         weapons = me['weapons']
         action = {'tick': obs['tick'], 'fire': [False, False], 'boost': False, 'jump': False}
         by_kind = {w['kind']: (i, w) for i, w in enumerate(weapons) if w}
+        if self.arc_resting:
+            self.arc_resting = me['energy'] < min(65, me['max_energy'] * .65)
+        elif me['energy'] < 20:
+            self.arc_resting = True
         mechs = [m for m in obs['mechs'] if m['kind'] == 'mech']
         nearest = min((math.dist(pos, m['pos']) for m in mechs), default=1e9)
         close_count = sum(math.dist(pos, m['pos']) < 100 for m in mechs)
         recovering = hp < 0.4 and nearest > 60
         if obs['offer']:
-            ranks = {'gun_damage': 90, 'gun_rate': 85, 'gun_mag': 80, 'plating': 95, 'armor': 88,
-                     'servos': 83, 'nanites': 92, 'reactor': 75, 'jets': 65, 'capacitor': 60,
-                     'lightning_efficiency': 100, 'lightning_range': 105, 'laser_damage': 98,
-                     'laser_charge': 96, 'gun_velocity': 78}
+            ranks = {'gun_damage': 88, 'gun_rate': 86, 'gun_mag': 85, 'plating': 100, 'armor': 94,
+                     'servos': 95, 'nanites': 96 if hp < .55 else 80, 'reactor': 77, 'jets': 70, 'capacitor': 60,
+                     'lightning_efficiency': 108, 'lightning_range': 106, 'laser_damage': 115,
+                     'laser_charge': 110, 'gun_velocity': 78}
             action['pick'] = max(range(len(obs['offer']['choices'])), key=lambda i: ranks.get(obs['offer']['choices'][i]['id'], 25))
 
         # Early second-weapon acquisition is worth a short detour. Empty slots
@@ -87,10 +92,10 @@ class Combat:
             replace = None
             if not wanted and 'mortar' in by_kind and p['kind'] in ('laser', 'lightning'):
                 wanted, replace = True, by_kind['mortar'][0]
-            if not wanted and p['kind'] == 'lightning' and 'laser' in by_kind and nearest < 65:
-                wanted, replace = True, by_kind['laser'][0]
+            if not wanted and p['kind'] == 'laser' and 'lightning' in by_kind and nearest > 45:
+                wanted, replace = True, by_kind['lightning'][0]
             if wanted:
-                pickup_candidates.append((distance / (1.4 if p['kind'] == 'lightning' else 1), p))
+                pickup_candidates.append((distance / (1.8 if p['kind'] == 'laser' else 1.1 if p['kind'] == 'lightning' else .8), p))
                 if distance <= self.config['loot']['pickup_radius']:
                     action['take'] = p['id']
                     if replace is not None and weapons[replace].get('charge', 0) == 0:
@@ -121,10 +126,14 @@ class Combat:
         target = min(targets, key=lambda pair: pair[0])[1] if targets else None
         self.target_id = target['id'] if target else None
 
-        goal = list(zone['next_center'])
+        # Hold favorable territory instead of automatically walking into the
+        # coordinated squad. Move to the next circle when its edge will catch us.
+        goal = list(pos[:2])
         seeking_weapon = False
         to_next = max(0, math.dist(pos[:2], zone['next_center']) - zone['next_radius'] + 12)
         urgent = not me['in_zone'] or (to_next > 0 and now + to_next / stats['walk_speed'] + 8 >= zone['shrink_end'])
+        if urgent or zone['next_radius'] <= 30:
+            goal = list(zone['next_center'])
         # Don't abandon an early duel just because a shrinking phase has begun.
         if not urgent and zone['next_radius'] > 30:
             if pickup_candidates and min(pickup_candidates, key=lambda pair: pair[0])[0] < 80 and nearest > 35:
@@ -141,7 +150,7 @@ class Combat:
         if target and target['kind'] == 'mech' and not urgent and not seeking_weapon and zone['next_radius'] > 20:
             ex, ey = unit(target['pos'][0] - x, target['pos'][1] - y)
             distance = math.dist(pos, target['pos'])
-            preferred = 32 if 'lightning' in by_kind else 65 if 'laser' in by_kind else 55
+            preferred = (60 if self.arc_resting else 35) if 'lightning' in by_kind else 90 if 'laser' in by_kind else 60
             if hp < 0.35 or close_count >= 3:
                 preferred += 40
             radial = max(-1.3, min(1.2, (distance - preferred) / 25))
@@ -182,7 +191,7 @@ class Combat:
                     if lightning:
                         w = lightning[1]
                         yaw = math.atan2(target['pos'][1] - y, target['pos'][0] - x)
-                        action['fire'][lightning[0]] = bool(can_fight and distance < w['stats']['range'] and me['energy'] >= w['stats']['energy'] + 8 and abs(angle_delta(yaw, me['aim'][0])) < math.radians(w['stats']['cone_deg']) * .85)
+                        action['fire'][lightning[0]] = bool(can_fight and not self.arc_resting and distance < w['stats']['range'] and me['energy'] >= w['stats']['energy'] + 8 and abs(angle_delta(yaw, me['aim'][0])) < math.radians(w['stats']['cone_deg']) * .85)
         if 'gun' in by_kind:
             gun = by_kind['gun'][1]
             action['reload'] = bool(gun.get('ammo', 0) == 0 or (target is None and nearest > 100 and gun.get('ammo', 0) <= gun['stats']['mag'] - 3))

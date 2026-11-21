@@ -90,6 +90,22 @@ class BotTests(unittest.TestCase):
         self.assertIsNotNone(solution)
         self.assertGreater(solution[0][1], gun_aim[1])
 
+        # Lightning must wait through a useful recharge period, rather than
+        # repeatedly spending each newly regenerated shot and resetting regen.
+        obs = json.loads(json.dumps(observations[0]))
+        obs['self']['weapons'][1] = {'kind': 'lightning', 'cooldown': 0, 'stats': hello['config']['weapons']['lightning']}
+        pos = obs['self']['pos']
+        enemy = {'id': 99, 'kind': 'mech', 'pos': [pos[0] + 15, pos[1], pos[2]], 'vel': [0, 0, 0], 'hp': 1400, 'cubes': 0}
+        obs['mechs'] = [enemy]
+        obs['self']['aim'] = [0, 0]
+        obs['self']['hp'] = obs['self']['max_hp']
+        bot.arena.clear_shot = lambda *args: True
+        for energy in (10, 30, 60):
+            obs['self']['energy'] = energy
+            self.assertFalse(bot.act(obs)['fire'][1])
+        obs['self']['energy'] = 80
+        self.assertTrue(bot.act(obs)['fire'][1])
+
 
 if __name__ == '__main__':
     unittest.main()
