@@ -66,6 +66,24 @@ class TerrainArena(Arena):
                 return False
         return True
 
+    def clear_move(self, pos, direction, stats):
+        # Inspect the next few decisions, not a 12 m ray extending beyond the
+        # destination. The longer ray stranded mechs beside loot near walls.
+        radius, height = stats['radius'], stats['height']
+        for distance in (1.5, 3):
+            x, y = pos[0] + direction[0] * distance, pos[1] + direction[1] * distance
+            b = self.bounds
+            if not (b['minX'] + radius < x < b['maxX'] - radius and b['minY'] + radius < y < b['maxY'] - radius):
+                return False
+            ground = self.ground(x, y)
+            if ground - pos[2] > distance * math.tan(math.radians(stats.get('max_slope_deg', 50))) + stats['step_up']:
+                return False
+            feet = max(pos[2], ground)
+            for dx, dy in ((0, 0), (radius, 0), (-radius, 0), (0, radius), (0, -radius)):
+                if self.solid(x + dx, y + dy, feet + stats['step_up'], feet + height):
+                    return False
+        return True
+
 
 class Survivor(Bot):
     name = 'Oval-Sentinel-rooftop-v2'

@@ -6,7 +6,7 @@ from pathlib import Path
 import unittest
 
 from bot import Bot, inside, lead
-from survivor import Survivor
+from survivor import Survivor, TerrainArena
 from combat import Combat
 from navigation import Navigator
 
@@ -15,6 +15,17 @@ ROOT = Path(__file__).resolve().parent
 
 
 class BotTests(unittest.TestCase):
+    def test_can_approach_loot_before_wall(self):
+        class Map:
+            bounds = {'minX': -60, 'maxX': 60, 'minY': -60, 'maxY': 60}
+            def ground(self, x, y):
+                return 0
+            def solid(self, x, y, low, high):
+                return x >= 10
+        stats = {'radius': 2.5, 'height': 9, 'step_up': 1.2}
+        self.assertTrue(TerrainArena.clear_move(Map(), [0, 0, 0], (1, 0), stats))
+        self.assertFalse(TerrainArena.clear_move(Map(), [6, 0, 0], (1, 0), stats))
+
     def test_route_around_obstacle(self):
         class Map:
             bounds = {'minX': -60, 'maxX': 60, 'minY': -60, 'maxY': 60}

@@ -234,6 +234,8 @@ class Combat:
                 continue
             future = [pos[0] + d[0] * 10, pos[1] + d[1] * 10]
             score = math.cos(offset) - max(0, math.dist(future, zone['center']) - max(0, zone['radius'] - 5)) * .3
+            velocity = me.get('vel', [0, 0, 0])
+            score += .15 * sum(d[i] * velocity[i] for i in range(2)) / stats['walk_speed']
             for projectile in obs['projectiles'][:30]:
                 rel = [projectile['pos'][i] - pos[i] for i in range(2)]
                 velocity = [projectile['vel'][i] - d[i] * stats['walk_speed'] for i in range(2)]

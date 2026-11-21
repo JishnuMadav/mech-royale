@@ -89,7 +89,7 @@ class Navigator:
             self.route = self.path(pos, goal)
             self.route_goal = list(goal)
             self.route_after = now + 3
-        while self.route and math.dist(pos[:2], self.route[0][:2]) < 8:
+        while self.route and math.dist(pos[:2], self.route[0][:2]) < 3.5:
             self.route.pop(0)
         return self.route[0][:2] if self.route else goal
 
