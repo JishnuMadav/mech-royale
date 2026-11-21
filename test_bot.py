@@ -15,6 +15,38 @@ ROOT = Path(__file__).resolve().parent
 
 
 class BotTests(unittest.TestCase):
+    def test_step_out_of_charging_laser_line(self):
+        class Map:
+            def clear_move(self, *args):
+                return True
+            def clear_shot(self, *args):
+                return True
+        bot = Combat.__new__(Combat)
+        bot.arena = Map()
+        bot.healing = bot.arc_resting = bot.boosting = False
+        bot.previous = bot.progress_pos = None
+        bot.stuck = 0
+        bot.jet_until = -1
+        stats = {'walk_speed': 11.7, 'boost_speed': 19.5, 'ground_accel': 58.5,
+                 'air_accel': 12, 'radius': 2.5, 'height': 9}
+        enemy = {'id': 1, 'kind': 'mech', 'hp': 1400, 'pos': [0, 0, 0],
+                 'aim': [0, 0], 'charging': True, 'cubes': 0}
+        obs = {'t': 0, 'self': {'pos': [80, 0, 0], 'vel': [0, 0, 0], 'stats': stats,
+               'weapons': [{'kind': 'gun'}, None], 'grounded': True, 'energy': 100,
+               'hp': 1400, 'max_hp': 1400, 'in_zone': True},
+               'zone': {'center': [80, 0], 'radius': 500}, 'mechs': [enemy], 'projectiles': []}
+        action = {}
+        bot.navigate(action, obs, (1, 0))
+        self.assertGreater(abs(action['move'][1]), .3)
+        self.assertTrue(action['boost'])
+        enemy['charging'] = False
+        bot.navigate(action, obs, (1, 0))
+        self.assertAlmostEqual(action['move'][1], 0)
+        self.assertFalse(action['boost'])
+        enemy.update(charging=True, aim=[0, 1.2])
+        bot.navigate(action, obs, (1, 0))
+        self.assertAlmostEqual(action['move'][1], 0)
+
     def test_can_approach_loot_before_wall(self):
         class Map:
             bounds = {'minX': -60, 'maxX': 60, 'minY': -60, 'maxY': 60}

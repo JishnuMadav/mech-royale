@@ -7,8 +7,17 @@ from navigation import Navigator
 import mechfight as mf
 
 
+def movement_displacement(velocity, desired, acceleration, elapsed):
+    delta = [desired[i] - velocity[i] for i in range(2)]
+    ramp = math.hypot(*delta) / max(.1, acceleration)
+    accelerating = min(elapsed, ramp)
+    fraction = accelerating / ramp if ramp > 1e-9 else 0
+    return [velocity[i] * accelerating + .5 * delta[i] * fraction * accelerating
+            + desired[i] * (elapsed - accelerating) for i in range(2)]
+
+
 class Combat:
-    name = 'Oval-Sentinel-finisher-v14'
+    name = 'Oval-Sentinel-beam-dodge-v18'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -303,6 +312,26 @@ class Combat:
         separation = 30 if 'lightning' in kinds and not self.arc_resting else 85 if 'laser' in kinds else 55
         if self.healing:
             separation += 25
+        beam_threats = []
+        for enemy in obs['mechs']:
+            if not enemy.get('charging') or not enemy.get('aim'):
+                continue
+            aim_yaw, pitch = enemy['aim']
+            forward = (math.cos(aim_yaw), math.sin(aim_yaw))
+            rel = [pos[i] - enemy['pos'][i] for i in range(2)]
+            along = sum(rel[i] * forward[i] for i in range(2))
+            gap = abs(rel[0] * forward[1] - rel[1] * forward[0])
+            muzzle_z = enemy['pos'][2] + 7 * (1 + .05 * enemy.get('cubes', 0))
+            beam_z = muzzle_z + math.tan(pitch) * along
+            if (0 < along < 290 and gap < stats['radius'] + 8
+                    and pos[2] - 4 < beam_z < pos[2] + stats['height'] + 4
+                    and self.arena.clear_shot([*enemy['pos'][:2], muzzle_z],
+                                             [*pos[:2], pos[2] + stats['height'] * .5])):
+                beam_threats.append((enemy['pos'], forward, muzzle_z, math.tan(pitch)))
+        speed = stats['boost_speed'] if self.boosting and me['grounded'] else stats['walk_speed']
+        if any(w and w['kind'] == 'laser' and w.get('charge', 0) > 0 for w in me['weapons']):
+            speed *= stats.get('charge_move_mult', .5)
+        acceleration = stats['ground_accel'] if me['grounded'] else stats['air_accel']
         candidates = []
         for offset in (0, .35, -.35, .7, -.7, 1.2, -1.2, 1.7, -1.7, 2.3, -2.3, math.pi):
             d = (math.cos(yaw + offset), math.sin(yaw + offset))
@@ -317,6 +346,17 @@ class Combat:
             for enemy in enemies:
                 distance = math.dist(future, enemy['pos'][:2])
                 score -= 8 * max(0, 1 - distance / separation) ** 2
+            if beam_threats:
+                displacement = movement_displacement(me['vel'], [v * speed for v in d], acceleration, .3)
+                projected = [pos[i] + displacement[i] for i in range(2)]
+                feet = pos[2] + (0 if me['grounded'] else me['vel'][2] * .3)
+                for source, forward, muzzle_z, slope in beam_threats:
+                    rel = [projected[i] - source[i] for i in range(2)]
+                    along = sum(rel[i] * forward[i] for i in range(2))
+                    beam_z = muzzle_z + slope * along
+                    if 0 < along < 290 and feet - 1 < beam_z < feet + stats['height'] + 1:
+                        gap = abs(rel[0] * forward[1] - rel[1] * forward[0])
+                        score -= max(0, stats['radius'] + 1 - gap)
             for projectile in obs['projectiles'][:30]:
                 rel = [projectile['pos'][i] - pos[i] for i in range(2)]
                 velocity = [projectile['vel'][i] - d[i] * stats['walk_speed'] for i in range(2)]
@@ -329,7 +369,7 @@ class Combat:
                         score -= (stats['radius'] + 2 - gap) * .35
             candidates.append((score, d))
         action['move'] = list(max(candidates, key=lambda p:p[0])[1]) if candidates else list(direction)
-        if direction == (0, 0):
+        if direction == (0, 0) and not beam_threats:
             action['move'] = [0, 0]
         if self.previous is not None and math.dist(pos, self.previous) < .12 and direction != (0, 0):
             self.stuck += 1
@@ -350,7 +390,7 @@ class Combat:
             action['jump'] = True
             self.jet_until = now + 4
         nearest = min((math.dist(pos, e['pos']) for e in enemies), default=1e9)
-        danger = not me['in_zone'] or me['hp'] < me['max_hp'] * .55 or ('laser' in kinds and nearest < 65)
+        danger = bool(beam_threats) or not me['in_zone'] or me['hp'] < me['max_hp'] * .55 or ('laser' in kinds and nearest < 65)
         if self.boosting:
             self.boosting = danger and me['energy'] > 20
         else:
