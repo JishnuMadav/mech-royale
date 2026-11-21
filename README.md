@@ -5,10 +5,10 @@ Dockerfile runs `combat.py`; there are no third-party runtime dependencies.
 
 ## Verified submission
 
-The selected entry scores **5.73** in official practice (48 matches).
+The selected entry scores **5.81** in official practice (48 matches).
 
-- Receipt: `BB-DF9C6D15`
-- Scored commit: `53c7150303aa26d5733e0c5aa01e1681a36ea10d`
+- Receipt: `BB-19EDB71A`
+- Scored commit: `e180da3acf355f2941d7768bb35419d0b104dbd5`
 - Repository: https://github.com/JishnuMadav/mech-royale
 - Track: https://www.joinbuilders.org/buildathon/tracks/builders
 
@@ -29,6 +29,8 @@ are evaluated. Private free-for-all games are diagnostics, not practice scores.
 The laser release logic tolerates the observation's two-decimal charge rounding:
 a reported charge of `0.56` can represent the full upgraded duration `0.563`.
 Without this tolerance, the beam can remain held until its automatic timeout.
+The selected version also releases a partial beam when its conservative damage
+estimate exceeds the target's HP, allowing for maximum armor and an HP margin.
 
 `bot.py` provides geometry helpers; `survivor.py` provides indexed terrain;
 `navigation.py` provides bounded ground routing and cover search. Their earlier
@@ -48,7 +50,7 @@ python3 mechfight-kit/check/check.py --map-dir /arena -- docker run --rm -i --ne
 
 The selected runtime passed the official checker under these container
 restrictions: **300/300 observations**, no missed deadlines, maximum response
-**11.5 ms** against a 50 ms budget. Regression checks cover geometry, aiming,
+**8.8 ms** against a 50 ms budget. Regression checks cover geometry, aiming,
 laser charge release, navigation, and decision handling. The checker validates
 protocol and timing; it does not simulate matches or establish playing strength.
 
@@ -62,13 +64,18 @@ protocol and timing; it does not simulate matches or establish playing strength.
 | Sustain | 3.67 | BB-AA2FFC04 |
 | Skirmish and loot | 5.10 | BB-B3606475 |
 | Supply capture and escape | 5.46 | BB-D98A5863 |
-| Laser charge rounding fix | **5.73** | **BB-DF9C6D15** |
+| Laser charge rounding fix | 5.73 | BB-DF9C6D15 |
 | More aggressive growth | 5.67 | BB-AA121873 |
 | Faster evasion | 5.17 | BB-5D04F286 |
 | Laser retreat from lightning | 5.71 | BB-444A6149 |
+| Armor and magazine priorities | 5.71 | BB-6683FFC3 |
+| Wider laser spacing | 5.65 | BB-093E79FF |
+| Terrain-aware loot | 5.67 | BB-0E14E4C3 |
+| Early lethal laser releases | **5.81** | **BB-19EDB71A** |
 
 Results above were observed on 2026-11-21. Each experimental commit is retained
 on its `codex/` branch; the selected scored commit is immutable.
+Exact commits and receipts are recorded in [results.json](results.json).
 
 ## Submission and attribution
 
