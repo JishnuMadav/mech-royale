@@ -7,8 +7,18 @@ from navigation import Navigator
 import mechfight as mf
 
 
+def movement_displacement(velocity, desired, acceleration, elapsed):
+    """Integrate acceleration toward a commanded horizontal velocity."""
+    delta = [desired[i] - velocity[i] for i in range(2)]
+    ramp = math.hypot(*delta) / max(.1, acceleration)
+    accelerating = min(elapsed, ramp)
+    fraction = accelerating / ramp if ramp > 1e-9 else 0
+    return [velocity[i] * accelerating + .5 * delta[i] * fraction * accelerating
+            + desired[i] * (elapsed - accelerating) for i in range(2)]
+
+
 class Combat:
-    name = 'Oval-Sentinel-laserfix-v8'
+    name = 'Oval-Sentinel-evasion-v10'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -219,7 +229,7 @@ class Combat:
             if hp < 0.35 or close_count >= 3:
                 preferred += 40
             radial = max(-1.3, min(1.2, (distance - preferred) / 25))
-            strafe = self.side * (1 if int(now / 2.2) % 2 == 0 else -1)
+            strafe = self.side * (1 if int(now / 1.0) % 2 == 0 else -1)
             direction = unit(ex * radial - ey * strafe, ey * radial + ex * strafe)
         if math.dist(pos[:2], goal) < 2 and target is None:
             direction = (0, 0)
@@ -286,6 +296,10 @@ class Combat:
         separation = 30 if 'lightning' in kinds and not self.arc_resting else 85 if 'laser' in kinds else 55
         if self.healing:
             separation += 25
+        speed = stats['boost_speed'] if self.boosting else stats['walk_speed']
+        if any(w and w['kind'] == 'laser' and w.get('charge', 0) > 0 for w in me['weapons']):
+            speed *= stats.get('charge_move_mult', .5)
+        acceleration = stats['ground_accel'] if me['grounded'] else stats['air_accel']
         candidates = []
         for offset in (0, .35, -.35, .7, -.7, 1.2, -1.2, 1.7, -1.7, 2.3, -2.3, math.pi):
             d = (math.cos(yaw + offset), math.sin(yaw + offset))
@@ -302,11 +316,13 @@ class Combat:
                 score -= 8 * max(0, 1 - distance / separation) ** 2
             for projectile in obs['projectiles'][:30]:
                 rel = [projectile['pos'][i] - pos[i] for i in range(2)]
-                velocity = [projectile['vel'][i] - d[i] * stats['walk_speed'] for i in range(2)]
-                speed2 = sum(v*v for v in velocity)
-                t = -sum(rel[i]*velocity[i] for i in range(2)) / max(1, speed2)
+                desired = [d[i] * speed for i in range(2)]
+                relative_velocity = [projectile['vel'][i] - desired[i] for i in range(2)]
+                speed2 = sum(v*v for v in relative_velocity)
+                t = -sum(rel[i]*relative_velocity[i] for i in range(2)) / max(1, speed2)
                 if 0 < t < .6:
-                    gap = math.hypot(*(rel[i] + velocity[i]*t for i in range(2)))
+                    displacement = movement_displacement(me['vel'], desired, acceleration, t)
+                    gap = math.hypot(*(rel[i] + projectile['vel'][i]*t - displacement[i] for i in range(2)))
                     pz = projectile['pos'][2] + projectile['vel'][2]*t
                     if gap < stats['radius'] + 2 and pos[2] <= pz <= pos[2] + stats['height']:
                         score -= (stats['radius'] + 2 - gap) * .35

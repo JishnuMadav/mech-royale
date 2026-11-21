@@ -7,7 +7,7 @@ import unittest
 
 from bot import Bot, inside, lead
 from survivor import Survivor, TerrainArena
-from combat import Combat
+from combat import Combat, movement_displacement
 from navigation import Navigator
 
 
@@ -15,6 +15,13 @@ ROOT = Path(__file__).resolve().parent
 
 
 class BotTests(unittest.TestCase):
+    def test_dodge_reversal_respects_inertia(self):
+        # Reversing 11.7 m/s at 58.5 m/s^2 takes .4 s. Halfway through,
+        # the mech has stopped, but still moved 1.17 m in its old direction.
+        self.assertAlmostEqual(movement_displacement([11.7, 0], [-11.7, 0], 58.5, .2)[0], 1.17)
+        self.assertAlmostEqual(movement_displacement([11.7, 0], [-11.7, 0], 58.5, .4)[0], 0)
+        self.assertAlmostEqual(movement_displacement([11.7, 0], [-11.7, 0], 58.5, .6)[0], -2.34)
+
     def test_can_approach_loot_before_wall(self):
         class Map:
             bounds = {'minX': -60, 'maxX': 60, 'minY': -60, 'maxY': 60}

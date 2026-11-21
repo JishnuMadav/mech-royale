@@ -70,6 +70,11 @@ V7 additionally captures nearby uncontested supply drops for full repair and
 power cubes. It uses the supplied landing and capture timing from observations.
 When no target is visible, it faces recent incoming damage instead of exposing
 its rear armor while scanning.
+The laser timing fix scored **5.73** (BB-DF9C6D15,
+`53c7150303aa26d5733e0c5aa01e1681a36ea10d`), which remains the selected entry.
+The growth experiment scored 5.67 and was not selected.
+V10 tests faster lateral direction changes and predicts projectile avoidance
+using actual acceleration, boost speed, and the laser charging slowdown.
 
 ## Submission
 
