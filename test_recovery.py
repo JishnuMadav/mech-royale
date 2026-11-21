@@ -110,31 +110,19 @@ class RecoveryTests(unittest.TestCase):
         self.assertAlmostEqual(action['move'][0], 0)
         self.assertAlmostEqual(abs(action['move'][1]), 1)
 
-    def test_escape_after_lightning_hit_preserves_energy(self):
+    def test_ground_escape_never_activates_jet(self):
         bot, obs = self.scenario()
-        obs['self'].update(grounded=True, energy=90)
+        obs['self'].update(grounded=True, energy=90, hp=obs['self']['max_hp'] * .4)
         obs['events'] = [dict(type='damaged', amount=60, weapon='lightning', bearing=0)]
-        bot.arena.solid = lambda *args: False
-        action = bot.act(obs)
-        self.assertTrue(action['jump'] and action['boost'])
-        self.assertLess(action['move'][0], 0)
-        obs['events'] = []
-        obs['self'].update(grounded=False, energy=24)
-        obs['t'] += .1
-        self.assertFalse(bot.act(obs)['boost'])
-
-    def test_only_launch_at_persistent_zone_block_with_headroom(self):
-        bot, obs = self.scenario()
-        bot.zone_urgent = True
-        obs['self'].update(grounded=True, energy=90)
-        bot.arena.clear_move = lambda *args: False
-        self.assertFalse(bot.escape_jet(obs, (1, 0), False))
-        obs['t'] += 1
-        bot.arena.solid = lambda *args: True
-        self.assertFalse(bot.escape_jet(obs, (1, 0), False))
-        bot.arena.solid = lambda *args: False
-        self.assertTrue(bot.escape_jet(obs, (1, 0), False))
-        self.assertFalse(bot.escape_jet(obs, (1, 0), False))
+        ground = bot.act(obs)
+        self.assertFalse(ground['jump'])
+        self.assertTrue(ground['boost'])
+        self.assertLess(ground['move'][0], 0)
+        obs['self']['grounded'] = False
+        for _ in range(20):
+            obs['t'] += .1
+            action = bot.act(obs)
+            self.assertFalse(action['boost'] or action['jump'])
 
     def test_retreat_on_repeated_burst_damage(self):
         bot, obs = self.scenario()

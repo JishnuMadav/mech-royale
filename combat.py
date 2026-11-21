@@ -8,15 +8,12 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-survival-jets'
+    name = 'Oval-Sentinel-ground-survival'
 
     def __init__(self, hello):
         self.config = hello['config']
         self.arena = TerrainArena(hello['map']['dir'])
         self.side = 1 if hello['slot'] % 2 else -1
-        self.previous = None
-        self.stuck = 0
-        self.jet_until = -1
         self.boosting = False
         self.target_id = None
         self.arc_resting = False
@@ -27,14 +24,10 @@ class Combat:
         self.pickup_memory = {}
         self.cube_memory = {}
         self.last_threat = (-100, 0)
-        self.progress_pos = None
-        self.progress_at = 0
         self.zone_urgent = False
         self.recent_hits = []
         self.lightning_until = -1
         self.lightning_bearing = 0
-        self.blocked_since = None
-        self.jet_ready_at = -1
 
     def record_hits(self, events, now, max_hp):
         self.recent_hits = [(t, amount) for t, amount in self.recent_hits if now - t < 1.5]
@@ -46,31 +39,6 @@ class Combat:
                 self.lightning_until = now + 1.2
                 self.lightning_bearing = event['bearing']
         return len(self.recent_hits) >= 2 and sum(hit[1] for hit in self.recent_hits) >= .18 * max_hp
-
-    def escape_jet(self, obs, direction, stuck):
-        me, now = obs['self'], obs['t']
-        pos, stats = me['pos'], me['stats']
-        blocked = (self.zone_urgent and direction != (0, 0) and me['grounded']
-                   and not self.arena.clear_move(pos, direction, stats))
-        if not blocked:
-            self.blocked_since = None
-        elif self.blocked_since is None:
-            self.blocked_since = now
-        stalled = blocked and now - self.blocked_since >= .8
-        if not (stalled or stuck or now < self.lightning_until):
-            return False
-        if not me['grounded'] or me['energy'] < 55 or now < self.jet_ready_at:
-            return False
-        x, y, z = pos
-        r = stats['radius']
-        head = z + stats['height']
-        if any(self.arena.solid(x + dx, y + dy, head, head + 12)
-               for dx, dy in ((0, 0), (r, 0), (-r, 0), (0, r), (0, -r))):
-            return False
-        self.jet_until = now + (2.5 if stuck else 1.6 if stalled else 1.1)
-        self.jet_ready_at = now + 4
-        self.navigator.route_after = -1
-        return True
 
     def update_recovery(self, hp):
         # Enter only below 25%; finish a recovery rather than oscillating at 25%.
@@ -169,7 +137,7 @@ class Combat:
         recovering = self.healing and nearest > 55
         if obs['offer']:
             ranks = {'gun_damage': 88, 'gun_rate': 86, 'gun_mag': 98, 'plating': 100, 'armor': 94,
-                     'servos': 95, 'nanites': 96 if hp < .55 else 80, 'reactor': 77, 'jets': 70, 'capacitor': 60,
+                     'servos': 95, 'nanites': 96 if hp < .55 else 80, 'reactor': 77, 'jets': 0, 'capacitor': 60,
                      'lightning_efficiency': 108, 'lightning_range': 106, 'laser_damage': 115,
                      'laser_charge': 110, 'gun_velocity': 78}
             action['pick'] = max(range(len(obs['offer']['choices'])), key=lambda i: ranks.get(obs['offer']['choices'][i]['id'], 25))
@@ -398,29 +366,13 @@ class Combat:
         action['move'] = list(max(candidates, key=lambda p:p[0])[1]) if candidates else list(direction)
         if direction == (0, 0):
             action['move'] = [0, 0]
-        if self.previous is not None and math.dist(pos, self.previous) < .12 and direction != (0, 0):
-            self.stuck += 1
-        else:
-            self.stuck = 0
-        self.previous = list(pos)
-        stalled = False
-        if self.progress_pos is None or direction == (0, 0):
-            self.progress_pos, self.progress_at = list(pos), now
-        elif now - self.progress_at >= 3:
-            stalled = math.dist(pos, self.progress_pos) < 4
-            self.progress_pos, self.progress_at = list(pos), now
-        stuck = direction != (0, 0) and (stalled or self.stuck > 10 or not candidates)
         nearest = min((math.dist(pos, e['pos']) for e in enemies), default=1e9)
-        if self.escape_jet(obs, direction, stuck):
-            action['jump'] = True
         danger = not me['in_zone'] or me['hp'] < me['max_hp'] * .55 or ('laser' in kinds and nearest < 65)
         if self.boosting:
             self.boosting = danger and me['energy'] > 20
         else:
             self.boosting = danger and me['energy'] > 65
-        action['boost'] = bool(self.boosting or (now < self.jet_until and me['energy'] > 10))
-        if not me['grounded'] and self.jet_ready_at > now:
-            action['boost'] = now < self.jet_until and me['energy'] > 25
+        action['boost'] = bool(me['grounded'] and self.boosting)
 
 
 if __name__ == '__main__':
