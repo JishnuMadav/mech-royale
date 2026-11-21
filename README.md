@@ -3,10 +3,11 @@
 Python bot for the 2026 Builders Buildathon Mech Royale track.
 No third-party runtime dependencies. The root Dockerfile is the submission entrypoint.
 
-This branch tests `survivor.py`, a rooftop-survival candidate built on `bot.py`.
-It selects interior roof positions inside the next circle, manages climbing
-energy, stops unnecessary combat during recovery, checks terrain along shot
-paths, and prioritizes the exact center in the final shrinking circles.
+This branch tests `combat.py`, a combat and loot candidate built on the original
+bot's geometry helpers and the rooftop candidate's indexed terrain model. It
+acquires a second weapon early, selects weapon-specific aim, manages laser
+release and mortar trajectories, strafes during fights, and protects reloads.
+`survivor.py` remains available for comparison but is not the entrypoint here.
 The initial baseline remains at commit `d4b7934b5ccbc02b6f29859bb9db385f0829ec4e`.
 
 ## Strategy
@@ -32,6 +33,7 @@ python3 setup_kit.py
 python3 -m unittest -v test_bot.py
 python3 mechfight-kit/check/check.py -- python3 -u bot.py
 python3 mechfight-kit/check/check.py -- python3 -u survivor.py
+python3 mechfight-kit/check/check.py -- python3 -u combat.py
 docker build --platform linux/amd64 -t mech-royale:initial .
 python3 mechfight-kit/check/check.py --map-dir /arena -- docker run --rm -i --network none --cpus 1 --memory 512m --memory-swap 512m --pids-limit 128 --cap-drop ALL --read-only --tmpfs /tmp:rw,size=64m --user 65534:65534 -v "$PWD/mechfight-kit/arena:/arena:ro" mech-royale:initial
 ```
@@ -42,10 +44,12 @@ schema compliance, and shutdown. It is not a simulator.
 Validated on 2026-11-21: all three regression checks passed; the official checker
 passed on Windows Python, local WSL Docker, and the Ubuntu VM Docker container.
 The VM answered all 300 observations within 50 ms (median 6.3 ms, p99 13.9 ms,
-maximum 17.5 ms), with no bad messages or stale responses. No practice score yet.
+maximum 17.5 ms), with no bad messages or stale responses. Its practice score
+was 1.29 (receipt BB-C2349777).
 The rooftop candidate also passed restricted WSL Docker validation: 300/300
 within budget, median 2.5 ms, p99 7.4 ms, maximum 11.2 ms. These are protocol
-measurements, not evidence of better placement; its practice result is pending.
+measurements, not evidence of better placement; its practice score was 0.44
+(receipt BB-D8559723), so it did not replace the baseline as the selected entry.
 
 ## Submission
 

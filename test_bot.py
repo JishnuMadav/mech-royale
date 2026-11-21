@@ -7,6 +7,7 @@ import unittest
 
 from bot import Bot, inside, lead
 from survivor import Survivor
+from combat import Combat
 
 
 ROOT = Path(__file__).resolve().parent
@@ -63,6 +64,31 @@ class BotTests(unittest.TestCase):
         action = bot.act(obs)
         self.assertEqual(action['move'], [0, 0])
         self.assertFalse(action['boost'])
+
+    def test_combat_weapon_aim_and_replay(self):
+        with gzip.open(ROOT / 'mechfight-kit/check/stream.jsonl.gz', 'rt') as stream:
+            messages = [json.loads(line) for line in stream if line.strip()]
+        hello = next(m for m in messages if m['type'] == 'hello')
+        hello['map']['dir'] = str(ROOT / 'mechfight-kit/arena')
+        bot = Combat(hello)
+        observations = [m for m in messages if m['type'] == 'obs']
+        for obs in observations:
+            action = bot.act(obs)
+            json.dumps(action, allow_nan=False)
+            self.assertEqual(action['tick'], obs['tick'])
+            self.assertLessEqual(math.hypot(*action['move']), 1.000001)
+        me = observations[0]['self']
+        target = {'id': 99, 'kind': 'mech', 'pos': [me['pos'][0] + 80, me['pos'][1], me['pos'][2]], 'vel': [0, 10, 0]}
+        gun = {'stats': hello['config']['weapons']['gun']}
+        laser = {'stats': hello['config']['weapons']['laser']}
+        mortar = {'stats': hello['config']['weapons']['mortar']}
+        gun_aim = bot.aim_at(me, target, 'gun', gun)[0]
+        laser_aim = bot.aim_at(me, target, 'laser', laser)[0]
+        self.assertGreater(gun_aim[0], 0)
+        self.assertAlmostEqual(laser_aim[0], 0)
+        solution = bot.aim_at(me, target, 'mortar', mortar)
+        self.assertIsNotNone(solution)
+        self.assertGreater(solution[0][1], gun_aim[1])
 
 
 if __name__ == '__main__':
