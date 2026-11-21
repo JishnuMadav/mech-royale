@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-21",
+  "date": "2026-11-22",
   "target_score": 6.31,
   "comparison": "strictly_greater",
   "selected": {
@@ -116,11 +116,17 @@
       "commit": "7a89f26e49bbe712100a9b77de64117d52d205e3",
       "receipt": "BB-5D14A8D0",
       "score": 5.65
+    },
+    {
+      "name": "squad-zone-v25",
+      "commit": "c1394621617c34b15b590c5ec8ffb3cf2001ae70",
+      "receipt": "BB-76ECA895",
+      "score": 5.48
     }
   ],
   "candidate": {
     "name": "squad-zone-v25",
-    "status": "validated_not_submitted",
+    "status": "scored",
     "unit_tests": 10,
     "docker_checks": [
       {
@@ -141,6 +147,9 @@
         "missed": 0,
         "max_ms": 25.1
       }
-    ]
+    ],
+    "score": 5.48,
+    "receipt": "BB-76ECA895",
+    "commit": "c1394621617c34b15b590c5ec8ffb3cf2001ae70"
   }
 }

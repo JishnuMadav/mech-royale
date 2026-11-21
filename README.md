@@ -18,7 +18,9 @@ are evaluated. Private free-for-all games are diagnostics, not practice scores.
 
 ## Candidate: squad survival and zone travel (v25)
 
-This branch is an **unscored candidate** based on the selected 5.81 runtime.
+This candidate scored **5.48** (receipt `BB-76ECA895`, scored commit
+`c1394621617c34b15b590c5ec8ffb3cf2001ae70`). It did not improve the selected
+5.81 entry. It is based on that selected runtime.
 It retains the selected 90 m laser preference. Movement favors breaking firing
 lines from nearby opponents, and seeks cover earlier when two enemies can see
 the bot and health is below 85%. Zone departure uses cached obstacle-route
@@ -30,7 +32,7 @@ opponents and zone escape taking priority over a nearby supply. Three restricted
 Docker checks each answered 300/300 observations within 50 ms: the official kit
 stream (maximum 20.1 ms), a private replay interval (22.0 ms), and a synthetic
 15-opponent stress stream (25.1 ms). These establish behavior and runtime
-compatibility, not an official score. The private replay is a recorded observation
+compatibility; the official result above measures playing strength. The private replay is a recorded observation
 sequence; it does not simulate the consequences of changed decisions.
 
 ## Strategy
