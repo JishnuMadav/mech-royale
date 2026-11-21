@@ -80,6 +80,22 @@ class RecoveryTests(unittest.TestCase):
         bot.arena.clear_move = lambda p,*args: p[0] < x+7
         self.assertIsNone(bot.opening_loot(obs, [], []))
 
+    def test_finishes_selected_crate_without_walking_under_the_gun(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        x,y,z = me['pos']
+        obs['t'], me['cubes'] = 1, 0
+        bot.arena.ground = lambda *args: z
+        bot.arena.clear_shot = lambda *args: True
+        me['weapons'][0].update(ammo=12, reload=0, cooldown=0)
+        obs['crates'] = [dict(id=1017,hp=300,pos=[x+30,y,z])]
+        self.assertGreater(bot.act(obs)['move'][0], .8)
+        obs['t'] += 1.5
+        me['pos'] = [x+19,y,z]
+        obs['crates'][0]['hp'] = 210
+        self.assertEqual(bot.act(obs)['move'], [0,0])
+        self.assertEqual(bot.first_cube_id, 1017)
+
     def test_does_not_seek_cover_at_half_health_when_outnumbered(self):
         bot, obs = self.scenario()
         pos = obs['self']['pos']

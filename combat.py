@@ -43,7 +43,8 @@ class Combat:
                 shots = math.ceil(c['hp'] / damage)
                 walk_time = math.dist(pos[:2], c['pos'][:2]) / stats['walk_speed']
                 firing_time = gun['cooldown'] + (shots-1) * gun['stats']['cooldown']
-                if shots <= 2 or (shots <= gun['ammo'] and not gun['reload'] and firing_time + .4 <= walk_time):
+                underway = c['id'] == self.first_cube_id
+                if shots <= 2 or (shots <= gun['ammo'] and not gun['reload'] and (underway or firing_time + .4 <= walk_time)):
                     options.append((1, c))
         # A loose cube saves firing and reload time. Consider only short walks.
         nearby = [(math.dist(pos, c['pos']) + 8 * crate, crate, c) for crate, c in options
@@ -246,6 +247,15 @@ class Combat:
                 if crate:
                     target = dict(item, kind='crate', vel=[0,0,0])
                     self.target_id = item['id']
+                    # Leave room to pitch the gun down at the crate. Once it
+                    # breaks, the loose cube becomes the movement goal.
+                    dx, dy = unit(x-goal[0], y-goal[1])
+                    gap = max(12, (z + stats['muzzle_height'] - item['pos'][2] - 1)
+                              / max(.1, math.tan(-stats['min_pitch'])) + 3)
+                    if math.dist(pos[:2], goal) > gap:
+                        goal = [goal[0]+gap*dx, goal[1]+gap*dy]
+                    else:
+                        goal = pos[:2]
             elif pickup_candidates and min(pickup_candidates, key=lambda pair: pair[0])[0] < 80 and nearest > 35:
                 goal = min(pickup_candidates, key=lambda pair: pair[0])[1]['pos'][:2]
                 seeking_loot = True
