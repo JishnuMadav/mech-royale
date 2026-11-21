@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-sound-scan-v29'
+    name = 'Oval-Sentinel-escape-v30'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -32,6 +32,70 @@ class Combat:
         self.progress_pos = None
         self.progress_at = 0
         self.zone_urgent = False
+        self.recent_hits = {}
+        self.escape_direction = None
+        self.escape_sources = ()
+        self.escape_after = -1
+
+    def escape_bearings(self, obs, mechs, avoid_arc):
+        now, me = obs['t'], obs['self']
+        self.recent_hits = {who: hit for who, hit in self.recent_hits.items() if now - hit[0] <= 3}
+        for e in obs['events']:
+            who = e.get('by')
+            if (e['type'] == 'damaged' and who in range(16) and who != me['id']
+                    and e.get('bearing') is not None):
+                self.recent_hits[who] = (now, e['bearing'], e['weapon'])
+        bearings = {who: hit[1] for who, hit in self.recent_hits.items()}
+        arc = {who for who, hit in self.recent_hits.items() if avoid_arc and hit[2] == 'lightning'}
+        pos = me['pos']
+        for enemy in mechs:
+            who, p = enemy['id'], enemy['pos']
+            if avoid_arc and 'lightning' in enemy.get('weapons', []) and math.dist(pos, p) <= 58:
+                arc.add(who)
+            if who in bearings or who in arc:
+                bearings[who] = math.atan2(p[1] - pos[1], p[0] - pos[0])
+        starter = now < 45 and me['cubes'] == 0 and sum(w is not None for w in me['weapons']) == 1
+        if arc or len(self.recent_hits) >= 2 or (starter and self.recent_hits):
+            return bearings, arc
+        return {}, set()
+
+    def escape_heading(self, obs, bearings, arc):
+        me, zone, now = obs['self'], obs['zone'], obs['t']
+        pos, stats = me['pos'], me['stats']
+        sources = (tuple(sorted(bearings)), tuple(sorted(arc)))
+        if (self.escape_direction and sources == self.escape_sources and now < self.escape_after
+                and self.arena.clear_move(pos, self.escape_direction, stats)):
+            return self.escape_direction
+        # Evaluate walkable segments. A nearby wall between the projected mech
+        # and an incoming bearing can break contact even with an unseen shooter.
+        vectors = [(math.cos(a), math.sin(a), who in arc) for who, a in bearings.items()]
+        best, direction = -math.inf, None
+        for i in range(16):
+            dx, dy = math.cos(i * math.pi / 8), math.sin(i * math.pi / 8)
+            travel = 0
+            feet = list(pos)
+            for step in range(1, 7):
+                if not self.arena.clear_move(feet, (dx, dy), stats):
+                    break
+                travel = 3 * step
+                feet = [pos[0] + travel * dx, pos[1] + travel * dy,
+                        max(pos[2], self.arena.ground(pos[0] + travel * dx, pos[1] + travel * dy))]
+            if not travel:
+                continue
+            body = [*feet[:2], feet[2] + stats['height'] * .65]
+            score = travel / 18
+            for vx, vy, is_arc in vectors:
+                score -= (2.5 if is_arc else 1) * (dx * vx + dy * vy) * travel / 18
+                if not self.arena.clear_shot(body, [body[0]+24*vx, body[1]+24*vy, body[2]]):
+                    score += 2
+            score -= max(0, math.dist(feet[:2], zone['center']) - zone['radius'] + 4) * .4
+            if self.escape_direction:
+                score += .5 * (dx*self.escape_direction[0] + dy*self.escape_direction[1])
+            if score > best:
+                best, direction = score, (dx, dy)
+        self.escape_direction = direction
+        self.escape_after, self.escape_sources = now + .8, sources
+        return direction
 
     def scan_yaw(self, obs):
         yaw, now = obs['self']['aim'][0], obs['t']
@@ -205,6 +269,9 @@ class Combat:
         to_next = self.navigator.zone_distance(pos, zone, now)
         urgent = not me['in_zone'] or (to_next > 0 and now + to_next / stats['walk_speed'] + 8 >= zone['shrink_end'])
         self.zone_urgent = urgent
+        bearings, arc = self.escape_bearings(obs, mechs, 'lightning' not in by_kind or self.arc_resting)
+        if not bearings or urgent:
+            self.escape_direction = None
         if urgent or zone['next_radius'] <= 30:
             goal = list(zone['next_center'])
         # Don't abandon an early duel just because a shrinking phase has begun.
@@ -275,6 +342,10 @@ class Combat:
             direction = (0, 0)
         if supply and math.dist(pos[:2], supply['pos'][:2]) < supply['radius'] - 3:
             direction = (0, 0)
+        if bearings and not urgent and not (seeking_cover and math.dist(pos[:2], goal) < 8):
+            direction = self.escape_heading(obs, bearings, arc) or direction
+        else:
+            self.escape_direction = None
         self.navigate(action, obs, direction)
         action['aim'] = [me['aim'][0] + .3, 0]
         if now - self.last_threat[0] < 2:
@@ -290,12 +361,12 @@ class Combat:
             chosen = by_kind.get('gun')
             laser = by_kind.get('laser')
             mortar = by_kind.get('mortar')
-            escaping_zone = not me['in_zone']
+            needs_full_speed = not me['in_zone'] or self.escape_direction is not None
             # Observed charge is rounded to 2 decimals, while upgraded charge
             # duration is rounded to 3 (.56 versus .563). Without tolerance a
             # full beam waits for the automatic two-second hold timeout.
             if laser and (self.laser_should_release(me, target, laser[1]) or
-                          (escaping_zone and laser[1].get('charge', 0) > 0)):
+                          (needs_full_speed and laser[1].get('charge', 0) > 0)):
                 chosen = laser
             elif mortar and mortar[1]['cooldown'] <= .05 and distance > 25:
                 chosen = mortar
@@ -316,16 +387,28 @@ class Combat:
                     elif weapon['kind'] == 'mortar':
                         action['fire'][slot] = bool(can_fight and aligned)
                     if laser and distance < laser[1]['stats']['range'] and can_fight:
-                        charged = self.laser_should_release(me, target, laser[1]) or escaping_zone
-                        if not escaping_zone or laser[1].get('charge', 0) > 0:
-                            # Outside the zone, discharge along the correct aim
-                            # and do not begin another movement-halving charge.
+                        charged = self.laser_should_release(me, target, laser[1]) or needs_full_speed
+                        if not needs_full_speed or laser[1].get('charge', 0) > 0:
                             action['fire'][laser[0]] = bool(not charged or not (weapon['kind'] == 'laser' and aligned))
                     lightning = by_kind.get('lightning')
                     if lightning:
                         w = lightning[1]
                         yaw = math.atan2(target['pos'][1] - y, target['pos'][0] - x)
                         action['fire'][lightning[0]] = bool(can_fight and not self.arc_resting and distance < w['stats']['range'] and me['energy'] >= w['stats']['energy'] + 8 and abs(angle_delta(yaw, me['aim'][0])) < math.radians(w['stats']['cone_deg']) * .85)
+        # The game uses torso yaw for rear armor. While withdrawing, face
+        # between two recent attackers if aiming at one exposes us to the other.
+        if self.escape_direction and len(bearings) >= 2:
+            yaw = action['aim'][0]
+            facings = list(bearings.values())
+            def front_margin(angle):
+                return min(math.cos(angle - a) for a in facings)
+            if front_margin(yaw) < 0:
+                options = [(a+b)/2 + offset for i, a in enumerate(facings)
+                           for b in facings[i+1:] for offset in (0, math.pi)]
+                facing = max(options, key=lambda a: (front_margin(a), -abs(angle_delta(a, me['aim'][0]))))
+                if front_margin(facing) > front_margin(yaw) + .15:
+                    action['aim'] = [me['aim'][0] + angle_delta(facing, me['aim'][0]), 0]
+                    action['fire'] = [False, False]
         if 'gun' in by_kind:
             gun = by_kind['gun'][1]
             action['reload'] = bool(gun.get('ammo', 0) == 0 or (target is None and nearest > 100 and gun.get('ammo', 0) <= gun['stats']['mag'] - 3))
@@ -349,7 +432,8 @@ class Combat:
             if not self.arena.clear_move(pos, d, stats):
                 continue
             future = [pos[0] + d[0] * 10, pos[1] + d[1] * 10]
-            score = math.cos(offset) - max(0, math.dist(future, zone['center']) - max(0, zone['radius'] - 5)) * .3
+            alignment = 4 if self.escape_direction else 1
+            score = alignment * math.cos(offset) - max(0, math.dist(future, zone['center']) - max(0, zone['radius'] - 5)) * .3
             velocity = me.get('vel', [0, 0, 0])
             score += .15 * sum(d[i] * velocity[i] for i in range(2)) / stats['walk_speed']
             # Circle travel must not walk straight into a fresh enemy's weapon
@@ -390,7 +474,7 @@ class Combat:
             action['jump'] = True
             self.jet_until = now + 4
         nearest = min((math.dist(pos, e['pos']) for e in enemies), default=1e9)
-        danger = not me['in_zone'] or me['hp'] < me['max_hp'] * .55 or ('laser' in kinds and nearest < 65)
+        danger = self.escape_direction is not None or not me['in_zone'] or me['hp'] < me['max_hp'] * .55 or ('laser' in kinds and nearest < 65)
         if self.boosting:
             self.boosting = danger and me['energy'] > 20
         else:

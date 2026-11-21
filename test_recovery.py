@@ -2,6 +2,7 @@
 import copy
 import gzip
 import json
+import math
 from pathlib import Path
 import unittest
 
@@ -129,6 +130,68 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(nav.zone_distance([50, 0, 0], zone, 1), 0)
         nav.path = lambda *args: []
         self.assertGreaterEqual(nav.zone_distance([-50, 0, 0], zone, 3), 92)
+
+    def test_laser_carrier_leaves_lightning_range_even_with_loot_ahead(self):
+        bot, obs = self.scenario()
+        pos = obs['self']['pos']
+        obs['self']['weapons'][1] = dict(kind='laser', cooldown=0, charge=0,
+                                         stats=self.hello['config']['weapons']['laser'])
+        obs['mechs'] = [dict(id=5, kind='mech', hp=1400, cubes=0, vel=[0, 0, 0],
+                             pos=[pos[0]+42, pos[1], pos[2]], weapons=['gun', 'lightning'])]
+        obs['cubes'] = [dict(id=3000, pos=[pos[0]+20, pos[1], pos[2]])]
+        bot.arena.clear_shot = lambda *args: True
+        action = bot.act(obs)
+        self.assertLess(action['move'][0], -.8)
+        self.assertFalse(action['fire'][1])
+        self.assertFalse(bot.healing)
+        obs['self']['weapons'][1] = None
+        obs['self']['cubes'] = 1
+        obs['t'] += 1
+        self.assertLess(bot.act(obs)['move'][0], -.8)
+
+    def test_two_distinct_mech_hits_trigger_escape_then_expire(self):
+        bot, obs = self.scenario()
+        obs['self']['cubes'] = 2
+        me = obs['self']['id']
+        source = (me+1) % 16
+        def hit(who):
+            return dict(type='damaged', by=who, weapon='gun', bearing=.7, amount=45)
+        obs['events'] = [hit(source), hit(source), hit(me), hit(104)]
+        bot.act(obs)
+        self.assertIsNone(bot.escape_direction)
+        obs['t'] += 2.9
+        obs['events'] = [hit((me+2) % 16)]
+        bot.act(obs)
+        self.assertIsNotNone(bot.escape_direction)
+        self.assertFalse(bot.healing)
+        obs['t'] += .2
+        obs['events'] = []
+        bot.act(obs)
+        self.assertIsNone(bot.escape_direction)
+
+    def test_starter_pressure_yields_to_urgent_zone_travel(self):
+        bot, obs = self.scenario()
+        pos = obs['self']['pos']
+        obs['t'] = 10
+        obs['self'].update(cubes=0, weapons=[obs['self']['weapons'][0], None])
+        obs['events'] = [dict(type='damaged', by=(obs['self']['id']+1) % 16,
+                              bearing=0, weapon='gun', amount=45)]
+        bot.arena.clear_shot = lambda *args: True
+        self.assertLess(bot.act(obs)['move'][0], -.8)
+        obs['self']['in_zone'] = False
+        obs['zone']['next_center'] = [pos[0]+50, pos[1]]
+        self.assertGreater(bot.act(obs)['move'][0], .8)
+        self.assertIsNone(bot.escape_direction)
+
+    def test_crossfire_facing_covers_both_reported_bearings(self):
+        bot, obs = self.scenario()
+        me = obs['self']['id']
+        angles = [-1.2, 1.2]
+        obs['events'] = [dict(type='damaged', by=(me+i+1) % 16, weapon='gun',
+                              bearing=angle, amount=45) for i, angle in enumerate(angles)]
+        action = bot.act(obs)
+        self.assertIsNotNone(bot.escape_direction)
+        self.assertTrue(all(math.cos(action['aim'][0]-a) > 0 for a in angles))
 
 
 if __name__ == '__main__':
