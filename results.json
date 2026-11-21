@@ -1,6 +1,6 @@
 {
   "date": "2026-11-21",
-  "target_score": 6,
+  "target_score": 6.31,
   "comparison": "strictly_greater",
   "selected": {
     "name": "finisher-v14",
@@ -92,6 +92,55 @@
       "commit": "e180da3acf355f2941d7768bb35419d0b104dbd5",
       "receipt": "BB-19EDB71A",
       "score": 5.81
+    },
+    {
+      "name": "beam-dodge-v18",
+      "commit": "a7b73a51e99bb6cfb6d9dae18f960d04165a1d1f",
+      "receipt": "BB-A61CC6BF",
+      "score": 5.65
+    },
+    {
+      "name": "physics-v17",
+      "commit": "71ec92b8632363e4e1fc52e20bec6b4fa61169af",
+      "receipt": "BB-3CF94DAD",
+      "score": 5.31
+    },
+    {
+      "name": "focus-v20",
+      "commit": "07a9d1c3fbb513d421f2e66e23af51199f75bb4c",
+      "receipt": "BB-7F41D080",
+      "score": 5.21
+    },
+    {
+      "name": "repair-v21",
+      "commit": "7a89f26e49bbe712100a9b77de64117d52d205e3",
+      "receipt": "BB-5D14A8D0",
+      "score": 5.65
     }
-  ]
+  ],
+  "candidate": {
+    "name": "squad-zone-v25",
+    "status": "validated_not_submitted",
+    "unit_tests": 10,
+    "docker_checks": [
+      {
+        "stream": "official kit",
+        "observations": 300,
+        "missed": 0,
+        "max_ms": 20.1
+      },
+      {
+        "stream": "private replay interval",
+        "observations": 300,
+        "missed": 0,
+        "max_ms": 22.0
+      },
+      {
+        "stream": "synthetic 15 opponents",
+        "observations": 300,
+        "missed": 0,
+        "max_ms": 25.1
+      }
+    ]
+  }
 }
