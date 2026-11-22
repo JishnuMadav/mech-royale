@@ -6,3 +6,6 @@
 !Dockerfile.survivor
 !combat.py
 !navigation.py
+!weapon_geometry.py
+!planner.py
+!ring_routes.py

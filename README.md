@@ -1,25 +1,35 @@
 # Mech Royale — Oval Sentinel
 
 Python entry for the 2026 Builders Buildathon Mech Royale track. The root
-Dockerfile runs `combat.py`; there are no third-party runtime dependencies.
+Dockerfile on this branch runs `planner.py` with the Python standard library.
+
+## Arena planner
+
+Each observation updates recent opponents and loot. The planner compares collecting,
+capturing a supply drop, fighting, recovering and rotating. When searching for a
+position, it considers reachable ground, past visits and the next ring. Local
+movement projects candidate headings through the terrain. Both weapon slots use
+the same torso aim and check their own firing conditions.
+
+Run `python -m unittest discover` from the repository root. With the starter kit
+installed, run `python mechfight-kit/check/check.py -- python -u planner.py`.
 
 ## Verified submission
 
-The selected entry scores **5.81** in official practice (48 matches).
+The selected entry scores **5.85** in official practice (48 matches).
 
-- Receipt: `BB-19EDB71A`
-- Scored commit: `e180da3acf355f2941d7768bb35419d0b104dbd5`
+- Receipt: `BB-7097A598`
+- Scored commit: `2054a5bb27fdd36c8b8f63eebddbcf145737694e`
 - Repository: https://github.com/JishnuMadav/mech-royale
 - Track: https://www.joinbuilders.org/buildathon/tracks/builders
 
-The development target is **strictly greater than 6.31**. It has not yet been
+The development target is **6.45 or higher**. It has not yet been
 reached. The site retains the best scored entry while experimental branches
 are evaluated. Private free-for-all games are diagnostics, not practice scores.
 
-## Recovery candidate v26 (unscored)
+## Recovery candidate v26 development history
 
-This branch starts from the selected 5.81 runtime, not the 5.48 squad/zone
-experiment. It starts cover recovery strictly below 25% health and finishes
+The v26 branch started from the 5.81 runtime. It starts cover recovery strictly below 25% health and finishes
 recovery at 60%, retains occupied shelter when enemies cannot see the bot,
 and does not start laser charges outside the zone. An already charged laser
 is aimed and released so charging does not keep halving escape speed.
