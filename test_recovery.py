@@ -138,6 +138,80 @@ class RecoveryTests(unittest.TestCase):
         bot.act(obs)
         self.assertTrue(bot.zone_urgent)
 
+    def test_mortar_pickup_respects_recent_laser_but_allows_other_weapons(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        x,y,z = me['pos']
+        me['weapons'][1] = None
+        obs.update(alive=8, t=10)
+        obs['pickups'] = [dict(id=8014,kind='mortar',pos=[x+1,y,z])]
+        obs['mechs'] = [dict(id=5,kind='mech',pos=[x+120,y,z],hp=1200,weapons=['gun','laser'])]
+        self.assertNotIn('take',bot.act(obs))
+        obs.update(t=12,mechs=[])
+        self.assertNotIn('take',bot.act(obs))
+        obs['pickups'].append(dict(id=8001,kind='lightning',pos=[x,y+1,z]))
+        self.assertEqual(bot.act(obs)['take'],8001)
+        obs.update(t=17,pickups=obs['pickups'][:1],sounds=[])
+        self.assertEqual(bot.act(obs)['take'],8014)
+
+    def test_final_duel_opens_gap_without_starting_another_charge(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        x,y,z = me['pos']
+        me['grounded'] = True
+        me['energy'] = me['max_energy']
+        me['weapons'][1] = dict(kind='laser', cooldown=0, charge=0,
+                                stats=self.hello['config']['weapons']['laser'])
+        obs.update(alive=2,t=60)
+        obs['mechs'] = [dict(id=5,kind='mech',hp=1000,pos=[x+35,y,z],weapons=['gun','lightning'])]
+        bot.arena.clear_shot = lambda *args: True
+        action=bot.act(obs)
+        self.assertLess(action['move'][0],-.7)
+        self.assertTrue(action['boost'])
+        self.assertFalse(action['fire'][1])
+        obs.update(t=61,mechs=[])
+        self.assertLess(bot.act(obs)['move'][0],-.5)
+        obs['t']=64
+        self.assertIsNone(bot.read_matchups(obs,[]))
+        obs.update(alive=3,t=65)
+        self.assertIsNone(bot.read_matchups(obs,[dict(pos=[x+35,y,z],weapons=['lightning'])]))
+
+    def test_duel_chooses_in_circle_heading_near_the_rim(self):
+        bot, obs = self.scenario()
+        x,y,z = obs['self']['pos']
+        obs['zone'].update(center=[x+28,y],radius=30,next_center=[x+28,y],next_radius=30)
+        action={}
+        bot.phase='endgame'
+        bot.navigate(action,obs,(-1,0),(x+20,y),70)
+        dx,dy = action['move']
+        self.assertLessEqual((10*dx-28)**2+(10*dy)**2,28**2)
+
+    def test_tiny_final_circle_keeps_laser_available(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        x,y,z = me['pos']
+        obs.update(alive=2,t=90)
+        obs['zone'].update(center=[x+9,y],radius=16,next_center=[x+9,y],next_radius=16)
+        obs['mechs'] = [dict(id=5,kind='mech',hp=1000,pos=[x+16,y,z],weapons=['lightning'])]
+        me['weapons'][1] = dict(kind='laser',cooldown=0,charge=0,stats=self.hello['config']['weapons']['laser'])
+        bot.arena.clear_shot = lambda *args: True
+        self.assertTrue(bot.act(obs)['fire'][1])
+
+    def test_duel_uses_rotation_buffer_only_with_time_to_return(self):
+        bot, obs = self.scenario()
+        me = obs['self']
+        x,y,z = me['pos']
+        obs.update(t=90,alive=2)
+        obs['zone'].update(next_center=[x+95,y],next_radius=25,shrink_end=107)
+        obs['mechs'] = [dict(id=5,kind='mech',hp=1000,pos=[x+40,y,z],weapons=['lightning'])]
+        me['weapons'][1] = dict(kind='laser',cooldown=0,charge=0,stats=self.hello['config']['weapons']['laser'])
+        bot.navigator.zone_distance = lambda *a:70
+        bot.arena.clear_shot = lambda *args: True
+        self.assertLess(bot.act(obs)['move'][0],-.5)
+        self.assertTrue(bot.zone_urgent)
+        obs['zone']['shrink_end'] = 92
+        self.assertGreater(bot.act(obs)['move'][0],0)
+
     def test_zone_distance_accounts_for_wall_detour(self):
         class Map:
             bounds = dict(minX=-80, maxX=80, minY=-80, maxY=80)

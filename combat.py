@@ -8,7 +8,7 @@ import mechfight as mf
 
 
 class Combat:
-    name = 'Oval-Sentinel-match-plan-v37'
+    name = 'Oval-Sentinel-matchups-v38'
 
     def __init__(self, hello):
         self.config = hello['config']
@@ -33,6 +33,8 @@ class Combat:
         self.phase = 'opening'
         self.contacts = {}
         self.incoming = {}
+        self.laser_risk_until = -1
+        self.arc_contact = None
 
     def read_fight(self, obs, mechs):
         now, me = obs['t'], obs['self']
@@ -65,6 +67,31 @@ class Combat:
             if sounds:
                 return min(sounds,key=lambda s:s['age'])['bearing']
         return None
+
+    def read_matchups(self, obs, enemies):
+        now, me = obs['t'], obs['self']
+        laser_range = self.config['weapons']['laser']['range']
+        if (any('laser' in e.get('weapons', ()) and math.dist(me['pos'], e['pos']) <= laser_range
+                for e in enemies)
+                or any(e['type'] == 'damaged' and e.get('weapon') == 'laser' for e in obs['events'])
+                or any(s['kind'] in ('laser_charge','laser') and s['dist'] == 'near' for s in obs.get('sounds', ()))):
+            self.laser_risk_until = now + 4
+        if obs['alive'] != 2:
+            self.arc_contact = None
+            return None
+        if enemies:
+            foe = enemies[0]
+            self.arc_contact = ((now, foe['pos'], foe.get('vel', (0,0,0)))
+                                if 'lightning' in foe.get('weapons', ()) else None)
+        if not self.arc_contact:
+            return None
+        seen, pos, velocity = self.arc_contact
+        if now-seen > 3:
+            return None
+        # A short extrapolation bridges a lost sighting. Limit it when the
+        # opponent has time to change direction behind a building.
+        lead_time = min(.9, now-seen+.45)
+        return (pos[0]+velocity[0]*lead_time, pos[1]+velocity[1]*lead_time)
 
     def update_recovery(self, hp):
         # Enter only below 25%; finish a recovery rather than oscillating at 25%.
@@ -155,6 +182,9 @@ class Combat:
             self.arc_resting = True
         mechs = [m for m in obs['mechs'] if m['kind'] == 'mech']
         self.read_fight(obs, mechs)
+        arc = self.read_matchups(obs, mechs)
+        if 'laser' not in by_kind:
+            arc = None
         guard = self.guarded_bearing(obs)
         nearest = min((math.dist(pos, m['pos']) for m in mechs), default=1e9)
         close_count = sum(math.dist(pos, m['pos']) < 100 for m in mechs)
@@ -171,6 +201,8 @@ class Combat:
         # accept any weapon; later replacements are based on the actual matchup.
         pickup_candidates = []
         for p in known_pickups:
+            if p['kind'] == 'mortar' and now <= self.laser_risk_until:
+                continue
             if p['kind'] in by_kind or abs(p['pos'][2] - z) > 4:
                 continue
             distance = math.dist(pos, p['pos'])
@@ -310,7 +342,23 @@ class Combat:
             direction = (0, 0)
         if supply and math.dist(pos[:2], supply['pos'][:2]) < supply['radius'] - 3:
             direction = (0, 0)
-        self.navigate(action, obs, direction)
+        arc_margin = self.config['weapons']['lightning']['range'] + 25
+        gap = math.dist(pos[:2], arc) if arc is not None else math.inf
+        # The general rotation alarm has a wide buffer. Spend at most two
+        # seconds of that buffer if the remaining walk still reaches the ring.
+        duel_slack = (me['in_zone'] and now + 2 + (to_next+15)/stats['walk_speed'] < zone['shrink_end'])
+        if gap < arc_margin and (not urgent or duel_slack):
+            direction = unit(x-arc[0], y-arc[1])
+        self.navigate(action, obs, direction, arc, arc_margin, duel_slack)
+        # Only trade laser charge for speed when the chosen move opens space.
+        # At a dead end, keep the beam available for the duel.
+        escaping_arc = (gap < arc_margin and me['grounded'] and
+                        (x-arc[0])*action['move'][0] + (y-arc[1])*action['move'][1] > .2*gap)
+        arc_range = self.config['weapons']['lightning']['range']
+        sprint_before_charge = (escaping_arc and gap < arc_range + 10 and
+                                math.dist(arc, zone['center']) + zone['radius'] - stats['radius'] > arc_range + 5)
+        if escaping_arc and me['energy'] > 32:
+            action['boost'] = True
         action['aim'] = [me['aim'][0] + .3, 0]
         if now - self.last_threat[0] < 2:
             action['aim'] = [self.last_threat[1], 0]
@@ -326,11 +374,12 @@ class Combat:
             laser = by_kind.get('laser')
             mortar = by_kind.get('mortar')
             escaping_zone = not me['in_zone']
+            need_speed = escaping_zone or (sprint_before_charge and target.get('hp',1400) > 150)
             # Observed charge is rounded to 2 decimals, while upgraded charge
             # duration is rounded to 3 (.56 versus .563). Without tolerance a
             # full beam waits for the automatic two-second hold timeout.
             if laser and (self.laser_should_release(me, target, laser[1]) or
-                          (escaping_zone and laser[1].get('charge', 0) > 0)):
+                          (need_speed and laser[1].get('charge', 0) > 0)):
                 chosen = laser
             elif mortar and mortar[1]['cooldown'] <= .05 and distance > 25:
                 chosen = mortar
@@ -351,8 +400,8 @@ class Combat:
                     elif weapon['kind'] == 'mortar':
                         action['fire'][slot] = bool(can_fight and aligned)
                     if laser and distance < laser[1]['stats']['range'] and can_fight:
-                        charged = self.laser_should_release(me, target, laser[1]) or escaping_zone
-                        if not escaping_zone or laser[1].get('charge', 0) > 0:
+                        charged = self.laser_should_release(me, target, laser[1]) or need_speed
+                        if not need_speed or laser[1].get('charge', 0) > 0:
                             # Outside the zone, discharge along the correct aim
                             # and do not begin another movement-halving charge.
                             action['fire'][laser[0]] = bool(not charged or not (weapon['kind'] == 'laser' and aligned))
@@ -368,7 +417,7 @@ class Combat:
             action['fire'] = [False, False]
         return action
 
-    def navigate(self, action, obs, direction):
+    def navigate(self, action, obs, direction, arc=None, arc_margin=0, duel_slack=False):
         me, zone, now = obs['self'], obs['zone'], obs['t']
         pos, stats = me['pos'], me['stats']
         yaw = math.atan2(direction[1], direction[0])
@@ -393,6 +442,16 @@ class Combat:
                 continue
             future = [pos[0] + d[0] * 10, pos[1] + d[1] * 10]
             score = math.cos(offset) - max(0, math.dist(future, zone['center']) - max(0, zone['radius'] - 5)) * .3
+            if arc is not None:
+                # Choose among walkable headings. A tangent can open space without
+                # stepping out of the circle when the direct retreat is blocked.
+                score -= .24 * max(0, arc_margin-math.dist(future,arc))
+                if math.dist(future,zone['center']) > max(zone['radius']-stats['radius'],
+                                                         math.dist(pos[:2],zone['center'])):
+                    score -= 100
+                if self.zone_urgent and not duel_slack:
+                    radius = max(0, zone['next_radius']-5)
+                    score -= .4 * max(0,math.dist(future,zone['next_center'])-radius)
             velocity = me.get('vel', [0, 0, 0])
             score += .15 * sum(d[i] * velocity[i] for i in range(2)) / stats['walk_speed']
             for p, ax, ay, charging in pressure:
